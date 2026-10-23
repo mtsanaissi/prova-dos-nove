@@ -56,7 +56,7 @@ consolidados — mas é desenhado para o Brasil.
 | Fonte | O que traz | Como entra |
 |---|---|---|
 | [Dados Abertos SEEDF](https://data.se.df.gov.br/) | Séries históricas por escola: unidades, matrículas, turmas, docentes, fluxo escolar, infraestrutura, distorção idade/série, IDEB/SAEB. CKAN, com GeoJSON e dicionário. | API CKAN, `01`–`02` |
-| [INEP — Censo Escolar](https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos/microdados/censo-escolar) | Microdados censitários de todas as escolas do país, públicas e privadas. | pendente: microdado nacional, só com recorte para o DF documentado |
+| [INEP — Censo Escolar](https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos/microdados/censo-escolar) | Microdados censitários de todas as escolas do país, públicas e privadas. Desde 2024 a publicação é **por escola**, não por aluno: matrícula por etapa e faixa etária. | download manual pelo navegador, `07`; recorte do DF em streaming, `11` |
 | [INEP — IDEB](https://www.gov.br/inep/pt-br/areas-de-atuacao/pesquisas-estatisticas-e-indicadores/ideb/resultados/2005-2025) | IDEB por escola e por UF, por dependência administrativa. | download manual pelo navegador, `07`–`08` |
 | [INEP — Taxas de Rendimento](https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos) | Aprovação, reprovação e abandono por escola, todas as redes. | download manual pelo navegador, `07`–`08` |
 | [INEP — Indicadores por escola](https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos) | Distorção idade-série e taxa de não-resposta por escola, todas as redes. | download manual pelo navegador, `07`–`08` |
@@ -72,20 +72,25 @@ escondido: nenhum script finge que baixou o que não baixou.
 
 **Fase 0 — reconhecimento.** A sessão de 2026-10-22 fechou o inventário e
 respondeu às seis perguntas da fase; a de 2026-10-23 abriu os microdados da
-PDAD-A 2024 e corrigiu duas contas de método (creche e biblioteca). A etapa não
-está completa: falta o Ideb por escola das escolas privadas, que a INEP não
-publica depois de 2017 (`REPORT.md` §5). Ainda não há produto: há inventário,
-dicionário de dados e as respostas que os dados já permitem.
+PDAD-A 2024 e corrigiu duas contas de método (creche e biblioteca), e depois
+ingeriu o **Censo Escolar 2024 e 2025** com recorte do DF: as taxas por escola
+agora têm versão ponderada pela matrícula, o resíduo de 11,6 mil crianças na
+creche foi explicado (era convenção de idade, não oferta faltando) e a série de
+matrículas da SEEDF foi conferida valor a valor contra a INEP. A etapa não está
+completa: falta o Ideb por escola das escolas privadas, que a INEP não publica
+depois de 2017 (`REPORT.md` §5). Ainda não há produto: há inventário, dicionário
+de dados e as respostas que os dados já permitem.
 
-Fontes baixadas e verificadas, todas com sha256 no `MANIFEST.md` (144 linhas):
+Fontes baixadas e verificadas, todas com sha256 no `MANIFEST.md` (146 linhas):
 80 arquivos da SEEDF (458 MB), 53 da PDAD-A (100 MB — 50 relatórios, dois
-microdados e o dicionário), 10 da INEP (345 MB) e a malha das RAs (4,6 MB). Os
-10 da INEP entraram à mão por `07`–`08`: Ideb 2025 por UF e por Brasil, os três
-arquivos por escola (iniciais, finais e médio), o médio com o integrado à EPT,
-as taxas de rendimento por escola, a distorção idade-série por escola, a taxa de
-não-resposta por escola e a nota informativa. A malha veio do serviço ArcGIS do
-IDE/DF (`09_download_malha.py`): 37 RAs, 35 com par no cadastro de 2025 e na
-PDAD-A 2024; `26 de Setembro` e `Ponte Alta` existem só na malha.
+microdados e o dicionário), 12 da INEP (916 MB) e a malha das RAs (4,6 MB). Os
+12 da INEP entraram à mão por `07`–`08` (e os dois do Censo por `07` e `11`):
+Ideb 2025 por UF e por Brasil, os três arquivos por escola (iniciais, finais e
+médio), o médio com o integrado à EPT, as taxas de rendimento por escola, a
+distorção idade-série por escola, a taxa de não-resposta por escola, a nota
+informativa e os **microdados do Censo Escolar de 2024 e 2025**. A malha veio do
+serviço ArcGIS do IDE/DF (`09_download_malha.py`): 37 RAs, 35 com par no cadastro
+de 2025 e na PDAD-A 2024; `26 de Setembro` e `Ponte Alta` existem só na malha.
 
 O escopo, os números e os vereditos estão em [`REPORT.md`](REPORT.md); os campos
 de cada arquivo, em [`SCHEMA.md`](SCHEMA.md); o que foi feito em cada etapa, em
@@ -111,9 +116,22 @@ de cada arquivo, em [`SCHEMA.md`](SCHEMA.md); o que foi feito em cada etapa, em
   do IDEB de anos iniciais de 2025 está entre Regiões Administrativas — o resto
   está dentro da mesma RA. (`ideb_ef_ai_2005_2025.csv`)
 - **27,1% das crianças de 0 a 3 anos frequentam creche; a meta é 50%.** São
-  139.116 crianças na faixa e ~37.654 na creche — faltam ~31,9 mil. Quase toda a
-  creche pública é conveniada: a rede própria da SEEDF tem 0,3% da matrícula, e
-  57,3% está na rede conveniada. (`pdad_frequencia.parquet`, `relatorio_matriculas_2024.csv`)
+  139.116 crianças na faixa e ~37.654 frequentando creche ou escola — faltam
+  ~31,9 mil. Quase toda a creche pública é conveniada: a rede própria da SEEDF
+  tem 0,3% da matrícula, e 57,3% está na rede conveniada.
+  (`pdad_frequencia.parquet`, `relatorio_matriculas_2024.csv`)
+- **A diferença entre Censo e PDAD na creche era convenção de idade.** O Censo
+  conta 37.595 crianças de 0–3 matriculadas contra 37.654 frequentando na PDAD
+  (0,16%, dentro do intervalo da amostra); os 26.076 que circulavam eram creche ×
+  idade no ano, não a faixa 0–3. E a creche é oferta privada: 475 unidades em
+  2025, 7 da rede estadual, 99,7% da matrícula na privada. (`REPORT.md` §2.7,
+  `q14_creche_fecho.csv`)
+- **As medianas por escola descrevem a escola típica, e a versão ponderada quase
+  não muda o número.** Com o peso de matrícula do Censo 2025, estadual e privada
+  ficam em 1,0 p.p. ou menos, com três exceções (abandono e reprovação no médio
+  estadual, +1,6 e +1,5 p.p.; distorção no médio da pequena rede federal, −3,0).
+  Nenhuma ordem entre redes se inverte. O ganho real é saber a cobertura: o Ideb
+  por escola cobre 65% da matrícula do médio estadual. (`q13_ponderacao_df.csv`)
 - **A distorção idade-série separa as redes.** Em 2025, a mediana na rede
   estadual é 9,0% nos anos iniciais, 17,1% nos finais e 20,7% no médio; na
   privada, 1,2%, 3,2% e 4,5% — nos finais e no médio, o p10 da estadual fica

@@ -1,12 +1,14 @@
-"""Respostas às seis perguntas da fase 0, ao Ideb nacional (q7–q10) e ao Ideb
-ausente (q11–q12).
+"""Respostas às seis perguntas da fase 0, ao Ideb nacional (q7–q10), ao Ideb
+ausente (q11–q12) e ao Censo Escolar (q13–q15).
 
 Entrada: parquets de `data/interim/seedf/`, `data/interim/pdad_populacao.csv`,
-         `data/interim/pdad/` (agregados da PDAD-A) e `data/interim/inep/`.
+         `data/interim/pdad/` (agregados da PDAD-A) e `data/interim/inep/`
+         (incluindo `censo_escola_df.parquet`, gravado por `11_ingest_censo.py`).
 Saída:   `data/interim/q1_unidades.csv` ... `q8_conferencia_seedf.csv`,
          `q9_em_integrado.csv`, `q10_fluxo_df.csv`, `q11_distorcao_df.csv`,
-         `q12_*.csv`, os três `q3_biblioteca*.csv` e um log com os números que
-         vão para o REPORT.md.
+         `q12_*.csv`, `q13_ponderacao_df.csv`, `q14_creche_*.csv`,
+         `q15_conferencia_censo.csv`, os três `q3_biblioteca*.csv` e um log com
+         os números que vão para o REPORT.md.
 Idempotente: sim — leitura e reescrita das saídas.
 
 Regra de leitura: nulo é ausente, `0` é zero. Nunca se soma nulo como zero.
@@ -1129,6 +1131,580 @@ def q12() -> None:
         )
 
 
+# ---------------------------------------------------------------- Censo
+# Peso de cada etapa: a matrícula que o Censo 2025 declara por escola. É o
+# denominador que faltava para transformar taxa por escola em taxa por aluno.
+PESO_ETAPA = {
+    "anos iniciais": "QT_MAT_FUND_AI",
+    "anos finais": "QT_MAT_FUND_AF",
+    "ensino médio": "QT_MAT_MED",
+}
+RECORTE_ETAPA = {"FUN_AI": "anos iniciais", "FUN_AF": "anos finais", "MED": "ensino médio"}
+CODIGO_ETAPA = {"anos iniciais": "AI", "anos finais": "AF", "ensino médio": "EM"}
+
+
+def _censo() -> pd.DataFrame | None:
+    """Recorte do DF dos microdados do Censo (11_ingest_censo.py), ou None."""
+    arq = INTERIM / "inep" / "censo_escola_df.parquet"
+    if not arq.exists():
+        print("   (sem data/interim/inep/censo_escola_df.parquet: rode 11_ingest_censo.py)")
+        return None
+    c = pd.read_parquet(arq)
+    c["CO_ENTIDADE"] = c["CO_ENTIDADE"].astype(str).str.strip()
+    return c
+
+
+def q13() -> None:
+    """A leitura por escola contra a leitura por matrícula, no DF de 2025.
+
+    Entrada: `data/interim/inep/{censo_escola_df, tdi_escolas_df,
+             tx_rend_escolas_df, ideb_escolas_df}.parquet` e
+             `data/interim/q8_df_brasil_uf.csv` (para a referência oficial).
+    Saída:   `data/interim/q13_ponderacao_df.csv`.
+    Idempotente: sim — leitura e reescrita.
+
+    As medianas de q8, q10, q11 e q12 descrevem a **escola típica** da rede. Com
+    a matrícula por escola × etapa do Censo 2025, a média ponderada descreve o
+    **aluno típico** — que é outra coisa, e a diferença entre as duas é medida
+    aqui, não suposta. Peso 0 é escola sem matrícula naquela etapa: ela não
+    pesa, e o universo com peso > 0 é o que serve de denominador da cobertura.
+    """
+    censo = _censo()
+    tdi_arq = INTERIM / "inep" / "tdi_escolas_df.parquet"
+    tx_arq = INTERIM / "inep" / "tx_rend_escolas_df.parquet"
+    ideb_arq = INTERIM / "inep" / "ideb_escolas_df.parquet"
+    if censo is None or not tdi_arq.exists() or not tx_arq.exists() or not ideb_arq.exists():
+        print("\n== Q13 não executado: falta o Censo (rode 11) ou os indicadores (rode 08)")
+        return
+
+    c25 = censo[censo["ano"] == 2025].copy()
+    taxas = []
+
+    t = pd.read_parquet(tdi_arq)
+    t = t[(t["NU_ANO_CENSO"] == "2025") & t["valor"].notna()]
+    for r in t.itertuples():
+        if r.recorte not in RECORTE_ETAPA:
+            continue
+        taxas.append(
+            {
+                "indicador": "distorcao_idade_serie",
+                "etapa": RECORTE_ETAPA[r.recorte],
+                "rede": r.NO_DEPENDENCIA,
+                "CO_ENTIDADE": str(r.CO_ENTIDADE).strip(),
+                "valor": r.valor,
+            }
+        )
+
+    t = pd.read_parquet(tx_arq)
+    t = t[(t["NU_ANO_CENSO"] == "2025") & t["valor"].notna()]
+    for r in t.itertuples():
+        if r.recorte not in RECORTE_ETAPA:
+            continue
+        taxas.append(
+            {
+                "indicador": r.categoria,
+                "etapa": RECORTE_ETAPA[r.recorte],
+                "rede": r.NO_DEPENDENCIA,
+                "CO_ENTIDADE": str(r.CO_ENTIDADE).strip(),
+                "valor": r.valor,
+            }
+        )
+
+    t = pd.read_parquet(ideb_arq)
+    t = t[(t["ano"] == "2025") & (t["indicador"] == "ideb_observado") & t["valor"].notna()]
+    for r in t.itertuples():
+        taxas.append(
+            {
+                "indicador": "ideb_observado",
+                "etapa": {v: k for k, v in CODIGO_ETAPA.items()}.get(r.etapa, r.etapa),
+                "rede": r.REDE,
+                "CO_ENTIDADE": str(r.ID_ESCOLA).strip(),
+                "valor": r.valor,
+            }
+        )
+    taxas = pd.DataFrame(taxas)
+
+    oficial = pd.read_csv(INTERIM / "q8_df_brasil_uf.csv")
+    oficial = oficial[oficial["ano"].astype(str) == "2025"]
+
+    linhas = []
+    for (indicador, etapa, rede), sub in taxas.groupby(["indicador", "etapa", "rede"]):
+        peso_col = PESO_ETAPA[etapa]
+        universo = c25[c25["rede"] == rede]
+        # peso 0 = escola sem matrícula naquela etapa; nulo aqui é ausência de
+        # matrícula declarada, e a escola não pesa (não é "nota zero")
+        w_universo = universo[peso_col].fillna(0)
+        s = sub.merge(
+            c25[["CO_ENTIDADE", peso_col]],
+            on="CO_ENTIDADE",
+            how="left",
+        )
+        s["peso"] = s[peso_col].fillna(0)
+        soma_peso = float(s["peso"].sum())
+        ponderada = float((s["valor"] * s["peso"]).sum() / soma_peso) if soma_peso else None
+        st = _distribuicao(s["valor"])
+        base = {"indicador": indicador, "etapa": etapa, "rede": rede}
+        # a referência oficial (Ideb da UF por rede) só existe para o Ideb; nas
+        # taxas por escola não há valor oficial por rede para comparar
+        ref = oficial[
+            (oficial["etapa"] == CODIGO_ETAPA[etapa]) & (oficial["rede"] == rede)
+        ] if indicador == "ideb_observado" else oficial.iloc[0:0]
+        linhas.append(
+            {
+                **base,
+                "escolas_da_rede_com_a_etapa": int((w_universo > 0).sum()),
+                "escolas_com_valor": st["com_ideb"],
+                "matricula_da_etapa": int(w_universo.sum()),
+                "matricula_com_valor": int(soma_peso),
+                "cobertura_matricula_pct": round(100 * soma_peso / w_universo.sum(), 1)
+                if w_universo.sum()
+                else None,
+                "mediana": st["mediana"],
+                "p10": st["p10"],
+                "p90": st["p90"],
+                "ponderada": round(ponderada, 2) if ponderada is not None else None,
+                "diferenca_pp": round(ponderada - st["mediana"], 2)
+                if ponderada is not None and st["mediana"] is not None
+                else None,
+                "referencia_oficial": float(ref["df"].iloc[0]) if len(ref) else None,
+                "diferenca_vs_oficial": round(ponderada - float(ref["df"].iloc[0]), 2)
+                if len(ref) and ponderada is not None
+                else None,
+            }
+        )
+    tab = pd.DataFrame(linhas)
+    ordem_i = ["ideb_observado", "distorcao_idade_serie", "aprovacao", "reprovacao", "abandono"]
+    ordem_e = {"anos iniciais": 0, "anos finais": 1, "ensino médio": 2}
+    tab["_i"] = tab["indicador"].map({k: i for i, k in enumerate(ordem_i)})
+    tab["_e"] = tab["etapa"].map(ordem_e)
+    tab = tab.sort_values(["_i", "_e", "rede"]).drop(columns=["_i", "_e"])
+    tab.to_csv(INTERIM / "q13_ponderacao_df.csv", index=False)
+
+    print("\n== Q13 ponderação (Censo 2025 × indicadores por escola)")
+    print(
+        "   mediana = escola típica (o que q8/q10/q11 publicam); ponderada = aluno "
+        "típico (peso = matrícula da etapa no Censo 2025)"
+    )
+    for indicador in ordem_i:
+        sub = tab[tab.indicador == indicador]
+        if sub.empty:
+            continue
+        print(f"\n   {indicador}:")
+        print(
+            sub[["etapa", "rede", "escolas_com_valor", "cobertura_matricula_pct",
+                 "mediana", "ponderada", "diferenca_pp", "referencia_oficial"]]
+            .to_string(index=False)
+        )
+    print(
+        "\n   cobertura: entre as escolas que têm a etapa, a fração da matrícula "
+        "coberta pelo indicador"
+    )
+
+
+def q14() -> None:
+    """Creche: o lado da oferta no Censo, a idade exata e o fecho com a PDAD.
+
+    Entrada: `data/interim/inep/censo_escola_df.parquet` (11),
+             `data/interim/seedf/matriculas__relatorio_matriculas_2024.parquet`,
+             `matriculas__2025_educa_dados_matricula_alt.parquet` (03) e
+             `data/interim/pdad/pdad_frequencia.parquet` (10).
+    Saída:   `data/interim/q14_creche_oferta.csv`, `q14_creche_idade.csv` e
+             `q14_creche_fecho.csv`.
+    Idempotente: sim — leitura e reescrita.
+
+    Três contagens de "criança pequena na escola" que já circularam como se
+    fossem a mesma: creche × idade no ano (26.076, série da SEEDF), faixa 0–3 do
+    Censo (37.595) e 0–3 frequentando (37.654, PDAD). Aqui as três aparecem lado
+    a lado com o cálculo de cada uma e com o teste que identifica a data de
+    referência da faixa etária.
+    """
+    censo = _censo()
+    if censo is None:
+        print("\n== Q14 não executado: falta o Censo (rode 11)")
+        return
+
+    # (1) oferta: unidades com creche e matrícula, por rede e ano
+    oferta = []
+    for ano in sorted(censo["ano"].unique()):
+        c = censo[censo["ano"] == ano]
+        for rede in ("Estadual", "Privada", "Federal", "Municipal"):
+            sub = c[c["rede"] == rede]
+            if sub.empty:
+                continue
+            com_creche = sub[sub["QT_MAT_INF_CRE"].fillna(0) > 0]
+            oferta.append(
+                {
+                    "ano": ano,
+                    "rede": rede,
+                    "unidades_na_rede": len(sub),
+                    "unidades_com_creche": len(com_creche),
+                    "matriculas_creche": int(sub["QT_MAT_INF_CRE"].fillna(0).sum()),
+                    "faixa_0_3_censo": int(sub["QT_MAT_BAS_0_3"].fillna(0).sum()),
+                    "faixa_0_3_31_03": int(sub["QT_MAT_BAS_0_3_REF_31_03"].fillna(0).sum())
+                    if sub["QT_MAT_BAS_0_3_REF_31_03"].notna().any()
+                    else None,
+                }
+            )
+        oferta.append(
+            {
+                "ano": ano,
+                "rede": "total",
+                "unidades_na_rede": len(c),
+                "unidades_com_creche": int((c["QT_MAT_INF_CRE"].fillna(0) > 0).sum()),
+                "matriculas_creche": int(c["QT_MAT_INF_CRE"].fillna(0).sum()),
+                "faixa_0_3_censo": int(c["QT_MAT_BAS_0_3"].fillna(0).sum()),
+                "faixa_0_3_31_03": int(c["QT_MAT_BAS_0_3_REF_31_03"].fillna(0).sum())
+                if c["QT_MAT_BAS_0_3_REF_31_03"].notna().any()
+                else None,
+            }
+        )
+    oferta = pd.DataFrame(oferta)
+    oferta["faixa_0_3_31_03"] = oferta["faixa_0_3_31_03"].astype("Int64")
+    oferta.to_csv(INTERIM / "q14_creche_oferta.csv", index=False)
+
+    # (2) matrícula por idade exata: só a série da SEEDF tem idade simples, já
+    # que o Censo publica faixa etária e não idade (ver SCHEMA.md)
+    idades = []
+    m24 = pd.read_parquet(S / "matriculas__relatorio_matriculas_2024.parquet")
+    for c in ("MAT_CRECHE", "MAT_PRE"):
+        m24[c] = num(m24[c]).fillna(0)
+    m24["idade"] = num(m24["IDADE"])
+    g24 = m24.groupby("idade")[["MAT_CRECHE", "MAT_PRE"]].sum()
+    m25 = pd.read_parquet(S / "matriculas__2025_educa_dados_matricula_alt.parquet")
+    cre = "Educação infantil - Creche"
+    pre = "Educação infantil - Pré-escola"
+    for c in (cre, pre):
+        m25[c] = num(m25[c]).fillna(0)
+    m25["idade"] = num(m25["Idade"])
+    g25 = m25.groupby("idade")[[cre, pre]].sum()
+    for idade in range(0, 8):
+        for ano, g, cc, cp in ((2024, g24, "MAT_CRECHE", "MAT_PRE"), (2025, g25, cre, pre)):
+            if idade not in g.index:
+                continue
+            idades.append(
+                {
+                    "ano": ano,
+                    "idade_no_ano": idade,
+                    "matriculas_creche": int(g.loc[idade, cc]),
+                    "matriculas_pre_escola": int(g.loc[idade, cp]),
+                }
+            )
+    idades = pd.DataFrame(idades)
+    idades.to_csv(INTERIM / "q14_creche_idade.csv", index=False)
+
+    # (3) o fecho: três contagens e o teste da data de referência
+    c24 = censo[censo["ano"] == 2024]
+    c25 = censo[censo["ano"] == 2025]
+    freq = pd.read_parquet(INTERIM / "pdad" / "pdad_frequencia.parquet")
+    f03 = freq[(freq["ra"] == "DF") & (freq["faixa"] == "0-3")].iloc[0]
+
+    cre24 = int(c24["QT_MAT_INF_CRE"].fillna(0).sum())
+    cre25 = int(c25["QT_MAT_INF_CRE"].fillna(0).sum())
+    faixa24 = int(c24["QT_MAT_BAS_0_3"].fillna(0).sum())
+    faixa25 = int(c25["QT_MAT_BAS_0_3"].fillna(0).sum())
+    faixa25_3103 = int(c25["QT_MAT_BAS_0_3_REF_31_03"].fillna(0).sum())
+
+    fecho = pd.DataFrame(
+        [
+            {
+                "contagem": "creche × idade no ano ≤ 3",
+                "valor": int(m24.loc[m24["idade"] <= 3, "MAT_CRECHE"].sum()),
+                "fonte": "relatorio_matriculas_2024.csv (SEEDF)",
+                "calculo": "soma de MAT_CRECHE nas linhas com IDADE ≤ 3",
+            },
+            {
+                "contagem": "0–3 na educação básica, faixa do Censo 2024",
+                "valor": faixa24,
+                "fonte": "microdados_censo_escolar_2024.zip (INEP)",
+                "calculo": "soma de QT_MAT_BAS_0_3 no DF; data de referência não "
+                "declarada no dicionário de 2024",
+            },
+            {
+                "contagem": "0–3 frequentando escola (PDAD-A 2024)",
+                "valor": int(f03["freq_est"]),
+                "fonte": "pdad_frequencia.parquet (IPEDF)",
+                "calculo": "peso_mor × H02=1 para idade na entrevista 0–3",
+            },
+            {
+                "contagem": "creche total 2024",
+                "valor": cre24,
+                "fonte": "microdados_censo_escolar_2024.zip (INEP)",
+                "calculo": "soma de QT_MAT_INF_CRE no DF",
+            },
+            {
+                "contagem": "creche total 2025",
+                "valor": cre25,
+                "fonte": "microdados_censo_escolar_2025_.zip (INEP)",
+                "calculo": "soma de QT_MAT_INF_CRE no DF",
+            },
+        ]
+    )
+    referencia = pd.DataFrame(
+        [
+            {
+                "ano": 2024,
+                "data_de_referencia": "não declarada no dicionário",
+                "subconjunto": "todas as escolas",
+                "faixa_0_3": faixa24,
+                "creche": cre24,
+                "razao_pct": round(100 * faixa24 / cre24, 1),
+            },
+            {
+                "ano": 2025,
+                "data_de_referencia": "última quarta-feira de maio",
+                "subconjunto": "todas as escolas",
+                "faixa_0_3": faixa25,
+                "creche": cre25,
+                "razao_pct": round(100 * faixa25 / cre25, 1),
+            },
+            {
+                "ano": 2025,
+                "data_de_referencia": "31/03 (Resolução CNE/CEB nº 05/2009)",
+                "subconjunto": "todas as escolas",
+                "faixa_0_3": faixa25_3103,
+                "creche": cre25,
+                "razao_pct": round(100 * faixa25_3103 / cre25, 1),
+            },
+        ]
+    )
+    # O teste que isola a data de referência: nas escolas que só têm creche,
+    # toda a matrícula é de criança pequena, então a razão faixa/creche mede
+    # exatamente a proporção de alunos com ≤ 3 anos na data da faixa. Se a
+    # faixa fosse em 31/03, essa razão seria ~100% (creche não tem criança de 4
+    # anos em 31/03); se for na data do Censo (maio), fica abaixo disso.
+    so_creche = lambda c: c[
+        (c["QT_MAT_INF_CRE"].fillna(0) > 0)
+        & (c["QT_MAT_INF_PRE"].fillna(0) == 0)
+        & (c["QT_MAT_FUND"].fillna(0) == 0)
+        & (c["QT_MAT_MED"].fillna(0) == 0)
+        & (c["QT_MAT_EJA"].fillna(0) == 0)
+    ]
+    for c, ano, colunas in (
+        (c24, 2024, [("não declarada no dicionário", "QT_MAT_BAS_0_3")]),
+        (
+            c25,
+            2025,
+            [
+                ("última quarta-feira de maio", "QT_MAT_BAS_0_3"),
+                ("31/03 (Resolução CNE/CEB nº 05/2009)", "QT_MAT_BAS_0_3_REF_31_03"),
+            ],
+        ),
+    ):
+        s = so_creche(c)
+        for rotulo, coluna in colunas:
+            referencia.loc[len(referencia)] = {
+                "ano": ano,
+                "data_de_referencia": rotulo,
+                "subconjunto": f"escolas só de creche ({len(s)} escolas)",
+                "faixa_0_3": int(s[coluna].fillna(0).sum()),
+                "creche": int(s["QT_MAT_INF_CRE"].fillna(0).sum()),
+                "razao_pct": round(
+                    100 * s[coluna].fillna(0).sum() / s["QT_MAT_INF_CRE"].fillna(0).sum(), 1
+                ),
+            }
+    referencia.to_csv(INTERIM / "q14_creche_referencia.csv", index=False)
+    # o conjunto de unidades com creche em 2025 contra o cadastro da SEEDF
+    cad = pd.read_parquet(S / "escolas__relatorio_escolas_2025.parquet")
+    cad_creche = set(cad.loc[num(cad["INF_CRE"]) == 1, "CO_ENTIDADE"].astype(str).str.strip())
+    censo_creche = set(c25.loc[c25["QT_MAT_INF_CRE"].fillna(0) > 0, "CO_ENTIDADE"])
+    fecho.loc[len(fecho)] = {
+        "contagem": "unidades com creche: Censo 2025 ∩ cadastro 2025",
+        "valor": len(cad_creche & censo_creche),
+        "fonte": "microdados_censo_escolar_2025_.zip + relatorio_escolas_2025.csv",
+        "calculo": (
+            f"interseção de CO_ENTIDADE; só no cadastro {len(cad_creche - censo_creche)}, "
+            f"só no Censo {len(censo_creche - cad_creche)}, "
+            f"cadastro {len(cad_creche)}, Censo {len(censo_creche)}"
+        ),
+    }
+    fecho.to_csv(INTERIM / "q14_creche_fecho.csv", index=False)
+
+    print("\n== Q14 creche: oferta no Censo")
+    print(oferta.to_string(index=False))
+    print(
+        f"\n   unidades com creche em 2025: {len(censo_creche)} no Censo, {len(cad_creche)} no "
+        f"cadastro, {len(cad_creche & censo_creche)} em comum "
+        f"(só no cadastro {len(cad_creche - censo_creche)}, só no Censo {len(censo_creche - cad_creche)})"
+    )
+    print("\n   matrícula em creche por idade no ano (série da SEEDF, a única com idade simples):")
+    print(idades.pivot(index="idade_no_ano", columns="ano", values="matriculas_creche").to_string())
+    print("\n   teste da data de referência da faixa etária:")
+    print(referencia.to_string(index=False))
+    print(
+        f"\n   creche × idade ≤ 3 = {int(m24.loc[m24['idade'] <= 3, 'MAT_CRECHE'].sum()):,}; "
+        f"faixa 0–3 do Censo 2024 = {faixa24:,}; diferença = "
+        f"{faixa24 - int(m24.loc[m24['idade'] <= 3, 'MAT_CRECHE'].sum()):,}"
+    )
+    print(
+        f"   0–3 frequentando (PDAD) = {int(f03['freq_est']):,} contra faixa 0–3 do Censo "
+        f"{faixa24:,}: diferença {int(f03['freq_est']) - faixa24:,} "
+        f"({100 * (int(f03['freq_est']) - faixa24) / faixa24:+.2f}%), dentro do IC de "
+        f"±{f03['freq_ic95_pp']} p.p. da PDAD"
+    )
+
+
+def q15() -> None:
+    """Conferência valor a valor: a série de matrículas da SEEDF contra o Censo.
+
+    Entrada: `data/interim/seedf/matriculas__relatorio_matriculas_2024.parquet`
+             e `data/interim/inep/censo_escola_df.parquet`.
+    Saída:   `data/interim/q15_conferencia_censo.csv`.
+    Idempotente: sim — leitura e reescrita.
+
+    Mesmo exercício do Ideb (q8): o mapeamento entre as colunas das duas fontes
+    é medido, não suposto. Só entram escolas presentes nos dois arquivos; as que
+    o Censo lista com a célula de matrícula vazia não são zero e ficam de fora,
+    contadas à parte.
+    """
+    censo = _censo()
+    arq = S / "matriculas__relatorio_matriculas_2024.parquet"
+    if censo is None or not arq.exists():
+        print("\n== Q15 não executado: falta o Censo (rode 11) ou a série da SEEDF (rode 03)")
+        return
+    c = censo[censo["ano"] == 2024].copy()
+    c["QT_MAT_MED_PROP_NM"] = c["QT_MAT_MED_PROP"].fillna(0) + c["QT_MAT_MED_NM"].fillna(0)
+    # a série da SEEDF é escola × idade × sexo × cor/raça: soma por escola
+    m = pd.read_parquet(arq).copy()
+    campos = [
+        "MAT_CRECHE",
+        "MAT_PRE",
+        "MAT_EI_TOTAL",
+        "MAT_EF_INI",
+        "MAT_EF_FIN",
+        "MAT_EF_TOTAL",
+        "MAT_EM_TOTAL",
+        "MAT_EMI",
+        "MAT_EJA_TOTAL",
+        "MAT_EE_TOTAL",
+        "MAT_EP_TEC_CONC",
+        "MAT_EP_TEC_SUBS",
+        "MAT_FIC",
+    ]
+    for campo in campos:
+        m[campo] = num(m[campo]).fillna(0)
+    g = m.groupby("CO_ENTIDADE")[campos].sum().reset_index()
+    g["CO_ENTIDADE"] = g["CO_ENTIDADE"].astype(str).str.strip()
+
+    pares = [
+        ("creche", "MAT_CRECHE", "QT_MAT_INF_CRE", "MAT_CRECHE ↔ QT_MAT_INF_CRE"),
+        ("pré-escola", "MAT_PRE", "QT_MAT_INF_PRE", "MAT_PRE ↔ QT_MAT_INF_PRE"),
+        ("educação infantil", "MAT_EI_TOTAL", "QT_MAT_INF", "MAT_EI_TOTAL ↔ QT_MAT_INF"),
+        ("EF anos iniciais", "MAT_EF_INI", "QT_MAT_FUND_AI", "MAT_EF_INI ↔ QT_MAT_FUND_AI"),
+        ("EF anos finais", "MAT_EF_FIN", "QT_MAT_FUND_AF", "MAT_EF_FIN ↔ QT_MAT_FUND_AF"),
+        ("EF total", "MAT_EF_TOTAL", "QT_MAT_FUND", "MAT_EF_TOTAL ↔ QT_MAT_FUND"),
+        (
+            "EM propedêutico + normal",
+            "MAT_EM_TOTAL",
+            "QT_MAT_MED_PROP_NM",
+            "MAT_EM_TOTAL ↔ QT_MAT_MED_PROP + QT_MAT_MED_NM",
+        ),
+        ("EM integrado", "MAT_EMI", "QT_MAT_MED_CT", "MAT_EMI ↔ QT_MAT_MED_CT"),
+        ("EJA", "MAT_EJA_TOTAL", "QT_MAT_EJA", "MAT_EJA_TOTAL ↔ QT_MAT_EJA"),
+        ("educação especial", "MAT_EE_TOTAL", "QT_MAT_ESP", "MAT_EE_TOTAL ↔ QT_MAT_ESP"),
+        (
+            "técnico concomitante",
+            "MAT_EP_TEC_CONC",
+            "QT_MAT_PROF_TEC_CONC",
+            "MAT_EP_TEC_CONC ↔ QT_MAT_PROF_TEC_CONC",
+        ),
+        (
+            "técnico subsequente",
+            "MAT_EP_TEC_SUBS",
+            "QT_MAT_PROF_TEC_SUBS",
+            "MAT_EP_TEC_SUBS ↔ QT_MAT_PROF_TEC_SUBS",
+        ),
+        ("FIC concomitante", "MAT_FIC", "QT_MAT_PROF_FIC_CONC", "MAT_FIC ↔ QT_MAT_PROF_FIC_CONC"),
+    ]
+    j = g.merge(c, on="CO_ENTIDADE", how="inner")
+    linhas = []
+    for etapa, campo_seedf, campo_censo, calculo in pares:
+        d = j[campo_seedf] - j[campo_censo]
+        por_rede = (
+            j.assign(d=d).query("d != 0")["rede"].value_counts().to_dict()
+        )
+        linhas.append(
+            {
+                "etapa": etapa,
+                "campo_seedf": campo_seedf,
+                "campo_censo": campo_censo,
+                "calculo": calculo,
+                "escolas_comparadas": len(j),
+                "iguais": int((d == 0).sum()),
+                "divergentes": int((d != 0).sum()),
+                "soma_seedf": int(j[campo_seedf].sum()),
+                "soma_censo": int(j[campo_censo].sum()),
+                "delta": int(d.sum()),
+                "delta_pct": round(100 * d.sum() / j[campo_censo].sum(), 3)
+                if j[campo_censo].sum()
+                else None,
+                "max_abs": int(d.abs().max()),
+                "redes_das_divergencias": "; ".join(f"{k} {v}" for k, v in por_rede.items()),
+            }
+        )
+
+    # total da educação básica: soma reconstruída dos componentes que a série
+    # da SEEDF tem, contra QT_MAT_BAS (ver dicionário da INEP para a definição)
+    comp_seedf = (
+        j["MAT_EI_TOTAL"]
+        + j["MAT_EF_TOTAL"]
+        + j["MAT_EM_TOTAL"]
+        + j["MAT_EMI"]
+        + j["MAT_EJA_TOTAL"]
+        + j["MAT_EP_TEC_CONC"]
+        + j["MAT_EP_TEC_SUBS"]
+        + j["MAT_FIC"]
+    )
+    linhas.append(
+        {
+            "etapa": "total da educação básica",
+            "campo_seedf": "EI + EF + EM + EMI + EJA + TEC_CONC + TEC_SUBS + FIC",
+            "campo_censo": "QT_MAT_BAS",
+            "calculo": "soma dos componentes acima, que é a definição de QT_MAT_BAS no "
+            "dicionário da INEP (a educação especial não entra: ela atravessa as etapas "
+            "e já está contada dentro delas)",
+            "escolas_comparadas": len(j),
+            "iguais": int((comp_seedf == j["QT_MAT_BAS"]).sum()),
+            "divergentes": int((comp_seedf != j["QT_MAT_BAS"]).sum()),
+            "soma_seedf": int(comp_seedf.sum()),
+            "soma_censo": int(j["QT_MAT_BAS"].sum()),
+            "delta": int((comp_seedf - j["QT_MAT_BAS"]).sum()),
+            "delta_pct": round(
+                100 * (comp_seedf - j["QT_MAT_BAS"]).sum() / j["QT_MAT_BAS"].sum(), 3
+            ),
+            "max_abs": int((comp_seedf - j["QT_MAT_BAS"]).abs().max()),
+            "redes_das_divergencias": "; ".join(
+                f"{k} {v}"
+                for k, v in j.assign(d=comp_seedf - j["QT_MAT_BAS"])
+                .query("d != 0")["rede"]
+                .value_counts()
+                .items()
+            ),
+        }
+    )
+    tab = pd.DataFrame(linhas)
+    tab.to_csv(INTERIM / "q15_conferencia_censo.csv", index=False)
+
+    sem_matricula = int((censo[censo["ano"] == 2024]["QT_MAT_BAS"].isna()).sum())
+    print("\n== Q15 conferência SEEDF × Censo 2024, valor a valor por escola")
+    print(tab.drop(columns="calculo").to_string(index=False))
+    print(
+        f"\n   {len(j):,} escolas comparadas; o Censo 2024 lista ainda {sem_matricula} escolas "
+        "do DF com a célula de matrícula vazia (ausente, não zero) — essas ficam fora"
+    )
+    eja = tab[tab.etapa == "EJA"].iloc[0]
+    etapas = tab[tab.etapa != "total da educação básica"].copy()
+    etapas["_abs"] = etapas["delta_pct"].abs()
+    piores = etapas.sort_values("_abs", ascending=False).head(3)
+    print("   maiores divergências em %:")
+    for r in piores.itertuples():
+        print(f"     {r.etapa}: {r.delta:+,} ({r.delta_pct:+.2f}%) em {r.divergentes} escolas")
+    print(
+        f"   EJA: {eja.delta:+,} ({eja.delta_pct:+.2f}%), em {eja.divergentes} escolas. A causa "
+        "não é determinável nas tabelas por escola — a base por aluno que explicaria não é "
+        "mais publicada desde 2024"
+    )
+
+
 if __name__ == "__main__":
     q1()
     q2()
@@ -1142,3 +1718,6 @@ if __name__ == "__main__":
     q10()
     q11()
     q12()
+    q13()
+    q14()
+    q15()

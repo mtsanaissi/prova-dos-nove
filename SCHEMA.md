@@ -79,6 +79,16 @@ o outro.
 abre por idade simples. Em 2024: 40.851 matrículas em creche, das quais 26.076
 com `IDADE` ≤ 3 e 14.775 com `IDADE` ≥ 4 (36,2%).
 
+**26.076 não é "as crianças de 0 a 3 na creche" do Censo.** É creche **× idade no
+ano** — uma terceira contagem, que não coincide com a faixa 0–3 que a INEP
+publica (37.595 em 2024, medida na data de referência do Censo) nem com as
+crianças de 0–3 que frequentam escola na PDAD-A (37.654). As três estão lado a
+lado em `q14_creche_fecho.csv`, com o cálculo de cada uma; a diferença de 11.519
+entre a primeira e a segunda é a coorte que tinha 4 anos no ano e 3 na data de
+referência. Nenhuma das três é "a" contagem certa: são convenções diferentes, e
+quem compara precisa dizer qual está usando (ver o bloco dos microdados do Censo
+e `REPORT.md` §2.7).
+
 **`IDADE` não é idade em 31/03.** O dicionário do campo diz "idade calculada pelo
 ano de nascimento": é a idade no ano do Censo, não a idade na data de corte da
 matrícula (31/03). A prova está no próprio arquivo — no 1º ano do fundamental,
@@ -400,6 +410,79 @@ nenhum CSV do projeto `ideb_projetado` entra como valor observado ou em média.
 | Critérios de não-cálculo | Portaria nº 435/2025: (H) menos de 10 estudantes presentes no SAEB; (I) participantes abaixo de 80% dos matriculados na etapa. O Quadro 1 do documento dá o número de escolas com e sem Ideb por motivo |
 | Uso no relatório | base da regra de três estados: escola sem Ideb é ausência com causa declarada, nunca zero |
 
+### `microdados_censo_escolar_2024.zip`, `microdados_censo_escolar_2025_.zip` (INEP — Censo Escolar)
+
+| Campo | Valor |
+|---|---|
+| Fonte | INEP — Microdados do Censo Escolar da Educação Básica, download manual pelo navegador (o `download.inep.gov.br` reseta a conexão de `urllib`/`curl` neste ambiente); ingeridos em 2026-10-23 por `07_ingest_inep.py` |
+| Arquivos | `data/raw/inep/2026-10-23_microdados_censo_escolar_2024.zip` (33.829.396 B) e `..._2025_.zip` (537.217.189 B). O sublinhado final do segundo é do nome que veio do servidor e foi preservado |
+| Conteúdo do zip | 2024: `dados/microdados_ed_basica_2024.csv` (217.925.280 B, 426 colunas) e `suplemento_cursos_tecnicos_2024.csv`; 2025 (v2): `Tabela_Matricula_2025_V2.csv` (123.318.048 B, 263 colunas), `Tabela_Escola`, `Tabela_Docente`, `Tabela_Turma`, `Tabela_Gestor`, `Tabela_Curso_Tecnico`, cada uma com o seu dicionário na aba correspondente do Anexo I |
+| **Grão** | **uma linha por estabelecimento de ensino**, não por aluno — ver "A publicação mudou de grão em 2024" |
+| Chave | `CO_ENTIDADE` (0 duplicatas no DF nas duas edições) |
+| Leitura | `scripts/11_ingest_censo.py`: zip aberto em memória, CSV em streaming, filtro `CO_UF == '53'`, nada do nacional materializado. Filtro por UF porque as duas tabelas têm `CO_UF` (não foi preciso usar o conjunto de códigos do cadastro) |
+| Linhas lidas | 2024: 215.545 nacionais, 1.360 do DF (0,63%); 2025: 178.766 e 1.291 (0,72%) |
+| Escolas no DF | 2024: 1.360 linhas, das quais **76 com a célula de matrícula vazia** (existência sem aluno declarado: CEEs, escolas extintas/paralisadas, unidades sem matrícula) — **ausente, não zero**; 1.284 com matrícula, o mesmo conjunto da série da SEEDF. 2025: 1.291, todas com matrícula, o mesmo conjunto do cadastro |
+| Saída | `data/interim/inep/censo_escola_df.parquet` (2.651 linhas = 1.360 + 1.291; 137.688 B) e `data/interim/inep/censo_metodo.csv` (as checagens) |
+| Encoding e separador | os dois são `latin-1` com `;` — detectados, não assumidos: a primeira passagem tenta `utf-8` e recomeça em `latin-1` quando um byte falha (o cabeçalho dos dois arquivos é ASCII puro e não denuncia o encoding do corpo) |
+| Renomes | nenhum campo de origem renomeado; derivados `ano` (do arquivo, não de coluna), `rede` (de `TP_DEPENDENCIA`: 1 Federal, 2 Estadual, 3 Municipal, 4 Privada — o mesmo vocabulário de `NO_DEPENDENCIA` na TDI/TNR) |
+| Colunas usadas | `CO_ENTIDADE`, `NO_ENTIDADE`, `CO_UF`, `SG_UF`, `CO_MUNICIPIO`, `TP_DEPENDENCIA`, `TP_CATEGORIA_ESCOLA_PRIVADA`, `TP_SITUACAO_FUNCIONAMENTO` (só 2024), `QT_MAT_BAS`, `QT_MAT_INF`, `QT_MAT_INF_CRE`, `QT_MAT_INF_PRE`, `QT_MAT_FUND`, `QT_MAT_FUND_AI`, `QT_MAT_FUND_AF`, `QT_MAT_MED`, `QT_MAT_MED_PROP`, `QT_MAT_MED_NM`, `QT_MAT_MED_CT` (só 2024), `QT_MAT_PROF_TEC_CONC`, `QT_MAT_PROF_TEC_SUBS`, `QT_MAT_PROF_FIC_CONC`, `QT_MAT_EJA`, `QT_MAT_ESP`, `QT_MAT_BAS_0_3`, `QT_MAT_BAS_4_5`, `QT_MAT_BAS_6_10`…`QT_MAT_BAS_18_MAIS`, `QT_MAT_BAS_0_3_REF_31_03` e `QT_MAT_BAS_4_5_REF_31_03` (só 2025) |
+| Idempotência | reescreve os parquets a partir do raw; duas execuções geram bytes idênticos; não acessa a rede |
+
+**A publicação mudou de grão em 2024 — e isso muda o que se pode perguntar.** O
+manual do usuário de 2024 diz que as bases passaram a ser "dimensionadas ao nível
+de escolas" e trazem matrícula por etapa, turno, tempo integral, sexo, cor/raça e
+faixa etária. **Não existe linha de aluno, `DT_NASCIMENTO` nem idade simples** em
+nenhuma das duas edições — conferido no cabeçalho das duas tabelas, e registrado
+em `censo_metodo.csv`. Consequências para o projeto:
+
+- O recorte é escola × etapa. Nenhuma linha de estudante sai deste script, e não
+  há parquet intermediário por pessoa a excluir: a fonte já é agregada.
+- **Idade simples só existe na série da SEEDF** (bloco `relatorio_matriculas_*`),
+  que republica o Censo. Do lado da INEP, o que há é faixa etária.
+- As faixas `QT_MAT_BAS_0_3` etc. **não são idade no ano**: são idade na data de
+  referência do Censo. Em 2025 o dicionário declara duas referências e publica as
+  duas colunas: `QT_MAT_BAS_0_3` (última quarta-feira de maio, 28/05/2025) e
+  `QT_MAT_BAS_0_3_REF_31_03` (31/03, Resolução CNE/CEB nº 05/2009). No DF:
+  39.293 e 42.945, 3.652 a mais em 31/03 (+9,3%) — a mesma criança conta em uma faixa
+  e não na outra. Em 2024 o dicionário **não declara** a referência e só a de maio
+  é publicada; o teste que a identifica está em "Qual é a data de referência de
+  2024".
+
+**Qual é a data de referência de 2024.** O arquivo de 2024 não diz, então a
+resposta é medida (`q14_creche_referencia.csv`). Nas escolas que só têm creche,
+toda a matrícula é de criança pequena, e a razão faixa 0–3 / creche mede a
+proporção de alunos com ≤ 3 anos na data da faixa. Se a faixa fosse em 31/03 essa
+razão seria ~100%, porque creche não tem criança de 4 anos em 31/03; se for na
+data do Censo (maio), fica abaixo disso porque parte da turma fez 4 anos entre
+abril e maio:
+
+| Edição | Referência | Escolas só de creche | Razão faixa 0–3 / creche |
+|---|---|---|---|
+| 2024 | não declarada no dicionário | 119 | **91,4%** |
+| 2025 | última quarta-feira de maio | 141 | **92,7%** |
+| 2025 | 31/03 | 141 | **99,9%** |
+
+A edição de 2024 se comporta como a de maio (91,4% ≈ 92,7%), não como a de 31/03
+(99,9%). É inferência, e está declarada como inferência: o que é fato é que a
+faixa de 2024 não é idade no ano (37.595 contra 26.076 de creche × idade ≤ 3) e
+que as duas referências de 2025 diferem em 9,3%.
+
+**Conferência das âncoras.** O script para se o recorte não reproduzir o que o
+projeto já publica: creche 2024 = 40.851 e creche 2025 = 42.582 (exatos), 1.284 e
+1.291 escolas com matrícula (exatos), e as seis faixas etárias somando
+`QT_MAT_BAS` em 1.284 de 1.284 e 1.291 de 1.291 escolas. Tolerância de 0,5%; acima
+disso, erro de leitura, não de fonte.
+
+### `censo_escola_df.parquet` (recorte do DF, derivado)
+
+| Campo | Valor |
+|---|---|
+| Gerado por | `scripts/11_ingest_censo.py` a partir dos dois zips acima |
+| Grão | escola × ano (2.651 linhas: 1.360 em 2024, 1.291 em 2025) |
+| Conteúdo | as colunas de identificação e de matrícula listadas acima, em formato largo, mais `ano` e `rede` |
+| Uso | peso das taxas por escola em `q13_ponderacao_df.csv`; oferta de creche e faixas etárias em `q14_creche_*.csv`; conferência da série da SEEDF em `q15_conferencia_censo.csv` |
+| Limite | não tem RA nem geometria: a tabela da INEP traz `CO_DISTRITO`/`CO_SUBDISTRITO`, que não são Regiões Administrativas. Todo recorte territorial deste projeto continua vindo do cadastro da SEEDF |
+
 ## Chaves e cruzamentos
 
 Taxas medidas por `scripts/04_crosswalk.py`, chave `CO_ENTIDADE`. "Órfãos em
@@ -419,6 +502,10 @@ para" = códigos no outro arquivo que não existem no cadastro daquele ano.
 | escolas 2023 → unidades EI 2023 | `CO_ENTIDADE` | `CO_ENTIDADE` | 445 de 1.264 | 35,2% | 20 |
 | escolas 2025 → TDI 2025 | `CO_ENTIDADE` | `CO_ENTIDADE` | 925 de 925 | 100% | 0 no arquivo da INEP; das 366 escolas do cadastro sem linha, 364 não ofertam fundamental nem médio e 2 ofertam (uma estadual, uma conveniada) |
 | escolas 2025 → TNR 2025 | `CO_ENTIDADE` | `CO_ENTIDADE` | 925 de 925 | 100% | idem |
+| escolas 2024 → Censo 2024 | `CO_ENTIDADE` | `CO_ENTIDADE` | 1.284 de 1.284 | 100% | 0; o Censo lista 76 escolas do DF a mais, todas com matrícula vazia |
+| escolas 2025 → Censo 2025 | `CO_ENTIDADE` | `CO_ENTIDADE` | 1.291 de 1.291 | 100% | 0 |
+| TDI/TNR/fluxo 2025 → Censo 2025 | `CO_ENTIDADE` | `CO_ENTIDADE` | 925 de 925 | 100% | 0 — todas as escolas com taxa têm peso de matrícula (`q13_ponderacao_df.csv`) |
+| Ideb 2025 (por escola) → Censo 2025 | `ID_ESCOLA` | `CO_ENTIDADE` | 624 de 624 | 100% | 0 |
 | Ideb 2025 (por escola) → TNR 2025 | `ID_ESCOLA` | `CO_ENTIDADE` | 611 de 624 | 97,9% | 13 fora da TNR: 8 estaduais de iniciais, 2 de finais e 5 privadas de médio; 9 dessas 13 também não estão no cadastro de 2025; 615 de 624 estão |
 
 Leitura: a chave não é o problema — `CO_ENTIDADE` casa 100% quando os dois
@@ -464,14 +551,18 @@ cruzamentos com matrícula por escola — declarada, não preenchida com zero.
 | situação | 2019 | 126.672 linhas contra ~72.000 nos demais anos; inclui rede federal |
 | distorção | 2024 | nomes de variável → rótulos legíveis, duas linhas de cabeçalho, 30 → 26 colunas |
 | IDEB | — | cabeçalho e separador diferentes entre anos iniciais (`;`, `cod_inep`) e anos finais/médio (`,`, `Cód_Inep`) |
+| Censo Escolar | 2024 | **muda o grão**: de aluno para estabelecimento; um CSV (`microdados_ed_basica_2024.csv`, 426 colunas) no lugar da base por aluno, sem `DT_NASCIMENTO` e sem idade simples |
+| Censo Escolar | 2025 | arquivo e nome mudam (`Tabela_Matricula_2025_V2.csv`, 263 colunas, versão v2); sai `QT_MAT_MED_CT` e o médio integrado passa a `QT_MAT_MED_IFTP_CT` (recorte diferente, não renomeação); entram `QT_MAT_BAS_*_REF_31_03`; `TP_SITUACAO_FUNCIONAMENTO` sai da tabela de matrícula e fica só na de escola |
 
 ## INEP: catálogo e o que entrou
 
 Catálogo declarado em `scripts/07_ingest_inep.py`; a ingestão é manual porque
 `download.inep.gov.br` bloqueia o `urllib`/`curl` deste ambiente e responde pelo
 navegador. `data/raw/inep/inbox/` recebe os arquivos, 07 registra procedência e
-sha256 no `MANIFEST.md`, 08 perfila o conteúdo e normaliza. Dez entraram e têm
-bloco próprio acima; não falta nenhum item do catálogo.
+sha256 no `MANIFEST.md`, 08 perfila o conteúdo e normaliza. Doze entraram e têm
+bloco próprio acima; não falta nenhum item do catálogo. Os dois últimos são lidos
+por `11_ingest_censo.py`, não pelo 08: são grandes demais para perfil e o recorte
+tem de acontecer em streaming.
 
 | Arquivo | O que acrescenta | Situação |
 |---|---|---|
@@ -485,6 +576,8 @@ bloco próprio acima; não falta nenhum item do catálogo.
 | `tx_rend_escolas_2025.zip` | aprovação/reprovação/abandono por escola, todas as redes | **ingerido** (2026-10-22, 66.870.247 B) |
 | `TDI_2025_ESCOLAS.zip` | distorção idade-série por escola, todas as redes | **ingerido** (2026-10-22, 34.465.795 B) |
 | `tnr_escolas_2025.zip` | taxa de não-resposta por escola; **não** distingue não participação de supressão (ver bloco) | **ingerido** (2026-10-22, 30.600.051 B) |
+| `microdados_censo_escolar_2024.zip` | matrícula por escola × etapa e faixa etária, todas as redes; confere a série da SEEDF de 2024 | **ingerido** (2026-10-23, 33.829.396 B) |
+| `microdados_censo_escolar_2025_.zip` | o peso das taxas por escola de 2025 e as duas datas de referência da faixa etária | **ingerido** (2026-10-23, 537.217.189 B) |
 
 Chave de ligação com o que já existe: `CO_ENTIDADE`. A INEP nem sempre usa esse
 nome (`CO_ESCOLA` aparece em indicadores por escola) — conferir no cabeçalho e
@@ -494,3 +587,8 @@ casamento medida, como os demais. Os três arquivos de Ideb por escola usam
 medida em `data/interim/q8_cobertura_escolas_2025.csv`. A TDI e a TNR usam
 `CO_ENTIDADE`: 925 de 925 escolas do DF casadas (100%, 0 fora) com o cadastro de
 2025, medido por `medir_juncao_cadastro()` no 08 a cada execução.
+
+O Censo Escolar usa `CO_ENTIDADE` e casa 1.284 de 1.284 (2024) e 1.291 de 1.291
+(2025); as 76 escolas que a edição de 2024 lista a mais têm matrícula vazia e
+ficam fora de qualquer soma. As 925 escolas com TDI/TNR têm peso de matrícula em
+2025 — medido em `q13_ponderacao_df.csv`, não suposto.

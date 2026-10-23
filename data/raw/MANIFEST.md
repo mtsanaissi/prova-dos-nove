@@ -168,6 +168,8 @@ sobre ele.
   e 473.417; os `sha256` não mudaram. O conteúdo é detectado pelos primeiros
   bytes em `10_ingest_pdad.py`; o `05` passou a derivar a extensão do sufixo da
   URL, e os nomes antigos continuam aceitos para não gerar download duplicado.
+| `2026-10-23_microdados_censo_escolar_2024.zip` | INEP/Censo Escolar | https://download.inep.gov.br/microdados/microdados_censo_escolar_2024.zip | 2026-10-23 | 33829396 | `ae29d81d45ddecef59e11eda39788cbfd30dfa1cc71be9d29f23051fc2d640db` | download manual pelo navegador; matrícula por escola × etapa em todas as redes: o peso que falta às taxas por escola e a conferência valor a valor da série de matrículas da SEEDF em 2024; URL canônica do diretório de microdados da INEP, não verificável deste ambiente (conexão resetada) |
+| `2026-10-23_microdados_censo_escolar_2025_.zip` | INEP/Censo Escolar | https://download.inep.gov.br/microdados/microdados_censo_escolar_2025_.zip | 2026-10-23 | 537217189 | `ad2c389160be5cf6b8e32257677e9b5657f01d10a342355ad9757bfecd2fc90a` | download manual pelo navegador; matrícula de 2025 por escola × etapa, para ponderar TDI, TNR, fluxo e Ideb do mesmo ano, e as faixas de idade nas duas datas de referência (31/03 e maio); URL canônica do diretório de microdados da INEP, não verificável deste ambiente (conexão resetada) |
 
 ## Regras
 

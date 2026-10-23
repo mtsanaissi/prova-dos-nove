@@ -119,6 +119,31 @@ CATALOGO = [
             "todas as redes; não separa não participação de resultado suprimido"
         ),
     },
+    {
+        "arquivo": "microdados_censo_escolar_2024.zip",
+        "url": BASE + "microdados/microdados_censo_escolar_2024.zip",
+        "fonte": "INEP/Censo Escolar",
+        "bytes_conhecidos": 33_829_396,
+        "prioridade": 2,
+        "acrescenta": (
+            "matrícula por escola × etapa em todas as redes: o peso que falta às taxas por "
+            "escola e a conferência valor a valor da série de matrículas da SEEDF em 2024"
+        ),
+    },
+    {
+        # o nome local tem o sublinhado final porque foi assim que o servidor o
+        # entregou ao navegador; o arquivo não é renomeado para o registro bater
+        # com o que entrou.
+        "arquivo": "microdados_censo_escolar_2025_.zip",
+        "url": BASE + "microdados/microdados_censo_escolar_2025_.zip",
+        "fonte": "INEP/Censo Escolar",
+        "bytes_conhecidos": 537_217_189,
+        "prioridade": 2,
+        "acrescenta": (
+            "matrícula de 2025 por escola × etapa, para ponderar TDI, TNR, fluxo e Ideb do "
+            "mesmo ano, e as faixas de idade nas duas datas de referência (31/03 e maio)"
+        ),
+    },
 ]
 
 POR_ARQUIVO = {c["arquivo"].lower(): c for c in CATALOGO}
@@ -168,6 +193,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--de", type=Path, default=INBOX, help="diretório onde os arquivos foram deixados")
     ap.add_argument("--check", action="store_true", help="só relatar, não mover nada")
+    ap.add_argument(
+        "--baixado-em",
+        default=DOWNLOAD_DATE,
+        help="data do download manual (prefixo do arquivo e coluna `baixado_em` do MANIFEST)",
+    )
     args = ap.parse_args()
 
     INEP.mkdir(parents=True, exist_ok=True)
@@ -194,13 +224,13 @@ def main() -> int:
         if meta is None:
             desconhecidas.append(p.name)
             continue
-        destino = INEP / f"{DOWNLOAD_DATE}_{meta['arquivo']}"
+        destino = INEP / f"{args.baixado_em}_{meta['arquivo']}"
         h = sha256(p)
         if destino.exists():
             if sha256(destino) == h:
                 duplicadas.append((p.name, "mesmo hash: já ingerido"))
                 continue
-            destino = INEP / f"{DOWNLOAD_DATE}_{Path(meta['arquivo']).stem}_v2{Path(meta['arquivo']).suffix}"
+            destino = INEP / f"{args.baixado_em}_{Path(meta['arquivo']).stem}_v2{Path(meta['arquivo']).suffix}"
             if destino.exists() and sha256(destino) == h:
                 duplicadas.append((p.name, "mesmo hash: já ingerido (v2)"))
                 continue
@@ -210,7 +240,7 @@ def main() -> int:
                 "arquivo": destino.name,
                 "fonte": meta["fonte"],
                 "url": meta["url"],
-                "baixado_em": DOWNLOAD_DATE,
+                "baixado_em": args.baixado_em,
                 "bytes": destino.stat().st_size,
                 "sha256": sha256(destino),
                 "notas": f"download manual pelo navegador; {meta['acrescenta']}",
