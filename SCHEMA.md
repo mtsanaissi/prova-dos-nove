@@ -1,0 +1,438 @@
+# SCHEMA.md — dicionário de dados
+
+Preenchido a partir de `scripts/03_profile_seedf.py` (`data/interim/profile_files.csv`,
+`data/interim/profile_columns.csv`), `scripts/04_crosswalk.py`
+(`data/interim/crosswalk.csv`), `scripts/08_profile_inep.py`
+(`data/interim/inep_perfil.csv` e os parquets da INEP) e `scripts/09_download_malha.py`
+(`data/interim/malha_ra_validacao.csv`). Uma linha por arquivo bruto em
+`MANIFEST.md`; aqui um bloco por família. Perfil coluna a coluna fica em
+`profile_columns.csv`.
+
+## Vocabulário controlado
+
+Toda célula vazia precisa ser classificada como uma destas três coisas — e o
+código precisa distinguir as três, não colapsar em `NaN`:
+
+| Estado | Significado | Exemplo |
+|---|---|---|
+| `zero` | o valor é zero | escola com 0 matrículas em creche |
+| `ausente` | deveria existir e não foi informado ou não foi coletado | escola privada sem IDEB por não participar do SAEB |
+| `nao_aplicavel` | a categoria não se aplica ao caso | taxa de abandono no ensino médio em escola que só tem infantil |
+
+Convenção adotada no código: nulo = `ausente`; `0` = zero; coluna que não existe
+naquele ano = `nao_aplicavel`. Onde a fonte usa `"NULL"`, `"-"` ou `""` como
+texto, o valor entra como `ausente` — nunca como zero. Na INEP, o traço `'-'` das
+planilhas de Ideb significa **sem resultado divulgado** (não participação,
+participantes abaixo do critério da Portaria nº 435/2025, ou resultado não
+publicado), e por isso o texto original é preservado em `valor_bruto` ao lado do
+`valor` nulo e do `estado = 'ausente'`. Já nas planilhas de taxa por escola
+(rendimento, TDI e TNR) o token é o traço duplo **`'--'`**, que significa **não
+aplicável** — a escola não tem matrícula naquela etapa/série — e entra como
+`estado = 'nao_aplicavel'`. São dois traços, dois significados: um não substitui
+o outro.
+
+## Modelo de arquivo
+
+### `relatorio_escolas_*.csv` (família `escolas`)
+
+| Campo | Valor |
+|---|---|
+| Fonte | SEEDF |
+| URL | CKAN `relacao-de-unidades-escolares-abrangendo-todas-as-redes-de-ensino-do-distrito-federal` |
+| Data do download | 2026-10-22 |
+| Anos cobertos | 2014–2025 (12 arquivos) |
+| Granularidade (o que é uma linha?) | uma unidade escolar em um ano do Censo |
+| Chave primária | `CO_ENTIDADE` (única em todos os anos; 0 duplicatas) |
+| Nº de linhas | 1.148 (2014) a 1.291 (2025) |
+| Redes cobertas | todas: federal, estadual vinculada e não vinculada, particular conveniada e não conveniada |
+| Observações | trazem `RA`/`Nome RA`, `CRE` e localização. **A oferta muda de forma em 2025:** até 2024 são contagens de turmas (`ESC_EI_CRECHE`, `ESC_EF_INI`, `ESC_EM_TOTAL`…); em 2025 são sinalizadores 0/1 (`INF_CRE`, `INF_PRE`, `FUND_AI`, `MED`…). 2025 também troca nomes de variável por rótulos legíveis ("Nome da escola"), passa de 74 para 81 colunas e traz uma linha de título acima do cabeçalho |
+
+**Colunas principais**
+
+| Coluna | Tipo | Descrição | Domínio observado (2025) |
+|---|---|---|---|
+| `CO_ENTIDADE` | texto | código INEP da escola | 8 dígitos, 1.291 distintos |
+| `Nome Rede` | texto | rede de ensino | 5 valores |
+| `RA` / `Nome RA` | texto | Região Administrativa | 36 valores, com inconsistências de espaço (`AGUAS CLARAS `) |
+| `Tipologia` | texto | tipo de unidade (PAR, CEPI, CEF, CEI, CEM…) | 18 valores, só existe em 2025 |
+| `INF_CRE`, `INF_PRE`, `FUND_AI`, `FUND_AF`, `MED` | 0/1 | oferta da etapa (só em 2025) | `0`/`1` |
+| `ESC_EI_CRECHE`, `ESC_EF_INI`, `ESC_EM_TOTAL` | inteiro | turmas por etapa (2014–2024) | 0 a ~40 |
+
+### `relatorio_matriculas_*.csv` (família `matriculas`)
+
+| Campo | Valor |
+|---|---|
+| Fonte | SEEDF (microdados do Censo Escolar filtrados para o DF) |
+| URL | CKAN `quantidade-de-matriculas-das-modalidades-de-ensino-abrangendo-todas-as-redes-de-ensino-do-df` |
+| Data do download | 2026-10-22 |
+| Anos cobertos | 2014–2024 em CSV; 2025 só em XLSX |
+| Granularidade | escola × idade × sexo × cor/raça, com contagens por etapa (`MAT_*`) |
+| Chave primária | `CO_ENTIDADE` + `IDADE` + `TP_SEXO` + `TP_COR_RACA` (0 duplicatas em 2024) |
+| Nº de linhas | 74.710 (2018) a 81.961 (2014) |
+| Redes cobertas | todas — **exceto 2023**, que traz apenas rede pública (600 escolas, 42.440 linhas) |
+| Observações | 2025 em XLSX muda o esquema: 73 colunas com rótulos legíveis e `Código INEP` |
+
+**Colunas principais**: `MAT_CRECHE`, `MAT_PRE`, `MAT_EI_TOTAL`, `MAT_EF_*`,
+`MAT_EM_*`, `NU_IDADE`. `0` é zero real; nulo não aparece nesses campos.
+
+**Leitura por idade:** `IDADE` acompanha a linha, então a matrícula em creche se
+abre por idade simples. Em 2024: 26.076 matrículas em creche de crianças de 0–3
+anos e 14.775 de 4 anos ou mais (36,2% do total de 40.851). Isso separa "quantas
+crianças em idade de creche estão na creche" de "quantas estão em creche fora da
+idade de creche" — a segunda conta não é demanda por creche.
+
+### `relatorio_infraestrutura_*.csv` (família `infraestrutura`)
+
+| Campo | Valor |
+|---|---|
+| Fonte | SEEDF |
+| URL | CKAN `dados-de-infraestrutura-abrangendo-todas-as-redes-de-ensino-df` |
+| Data do download | 2026-10-22 |
+| Anos cobertos | 2014–2025 (12 arquivos) |
+| Granularidade | uma unidade escolar em um ano |
+| Chave primária | `CO_ENTIDADE` (0 duplicatas) |
+| Nº de linhas | 1.050 (2014) a 1.471 (2025) |
+| Redes cobertas | todas |
+| Observações | **(a)** o arquivo rotulado 2016 contém ano 2017 e é idêntico ao de 2017 — 2016 não existe; **(b)** 2025 tem 289 colunas contra 114 dos anos anteriores; **(c)** 2025 inclui 139 escolas paralisadas/extintas (`TP_SITUACAO_FUNCIONAMENTO` 2 e 3), por isso 1.471 linhas contra 1.291 do cadastro; **(d)** `TP_DEPENDENCIA` não distingue conveniada de privada em 2025 — é preciso usar `CO_REDE`/`NO_REDE` |
+
+**Colunas principais**: `IN_BIBLIOTECA`, `IN_LABORATORIO_INFORMATICA`,
+`IN_INTERNET`, `IN_QUADRA_ESPORTES`, `IN_ACESSIBILIDADE_*`, `IN_BANHEIRO`,
+`IN_ESGOTO_*`, `IN_AGUA_*`. São 0/1: `1` = existe. **Exceção:** colunas com
+sufixo `_INEXISTENTE` marcam a ausência com `1`.
+
+### `relatorio_situacao_aluno_excel_*.csv` (família `situacao`)
+
+| Campo | Valor |
+|---|---|
+| Fonte | SEEDF |
+| URL | CKAN `situacao-do-aluno-serie-historica` |
+| Data do download | 2026-10-22 |
+| Anos cobertos | 2019–2024 (2025 em versão reduzida: 2.421 linhas, 27 colunas, só totais) |
+| Granularidade | escola × idade × sexo × cor/raça × situação × concluinte |
+| Chave primária | `CO_ENTIDADE` + `IDADE` + `TP_SEXO` + `TP_COR_RACA` + `TP_SITUACAO` + `CONCLUINTE` (0 duplicatas em 2023) |
+| Nº de linhas | 126.672 (2019) a 71.122 (2020) |
+| Redes cobertas | **apenas rede pública estadual vinculada à SEEDF**; 2019 inclui também federal |
+| Observações | `SITUACAO` ∈ {APROVADO, REPROVADO, SIR, DEIXOU DE FREQUENTAR, FALECIDO}; `SIR` = sem informação de rendimento, é `ausente`, não reprovação |
+
+### `relatorio_distorcao_idade_serie_*.csv` (família `distorcao`)
+
+| Campo | Valor |
+|---|---|
+| Fonte | SEEDF |
+| Anos cobertos | 2014–2025 |
+| Granularidade | escola × etapa/série (taxas `TDI_*`) |
+| Chave primária | `CO_ENTIDADE` (0 duplicatas em 2023) |
+| Redes cobertas | todas |
+| Observações | 2014–2023 com nomes de variável; 2024–2025 com duas linhas de cabeçalho e rótulos legíveis. Baixado e perfilado, **não usado** nas respostas desta sessão |
+
+### `relatorio_docentes_*.csv`, `*_educa_dados_docente-alt.csv` (família `docentes`)
+
+| Campo | Valor |
+|---|---|
+| Fonte | SEEDF |
+| Anos cobertos | 2023, 2024, 2025 (só os três mais recentes foram baixados) |
+| Granularidade | escola × idade × sexo (contagens de docentes) |
+| Chave primária | não única por escola — o grão é escola × características do docente |
+| Observações | 2025 com rótulos legíveis, 79 colunas. Não usado nas respostas desta sessão |
+
+### `*_educa_dados_turma.csv` (família `turmas`)
+
+| Campo | Valor |
+|---|---|
+| Fonte | SEEDF |
+| Anos cobertos | 2024 e 2025 (só os dois mais recentes foram baixados; há CSV de 2015 a 2022 no portal) |
+| Granularidade | escola × turno/turma (`ID_TURMA`) |
+| Chave primária | `ID_TURMA` (0 duplicatas em 2024) |
+| Observações | 2015 em `latin-1` com `;` — caso concreto de que não se pode assumir encoding |
+
+### `ideb_ef_ai_2005_2025*.csv`, `ideb_ef_af_2005_2025.csv`, `ideb_em_2017_2025.csv` (família `ideb_serie`)
+
+| Campo | Valor |
+|---|---|
+| Fonte | SEEDF (republicação dos resultados do SAEB/IDEB) |
+| Anos cobertos | 2005–2025 (bienal; EM a partir de 2017) |
+| Granularidade | escola × ano × etapa × indicador |
+| Chave primária | `cod_inep` + `ano` + `etapa_modalidade` + `indicador` |
+| Redes cobertas | **Estadual** em anos iniciais; Estadual + Federal em anos finais; Estadual + Privada + Federal no médio |
+| Observações | formato longo: `indicador` ∈ {IDEB, Nota SAEB, Taxa de Aprovação, Meta}. `valor` pode ser `-` = `ausente` (não participou), nunca zero. **Cabeçalhos diferentes entre as três etapas** (`cod_inep` minúsculo no AI, `Cód_Inep` no AF/EM) e separador `;` só no AI |
+
+### `planilha_ideb_*_2019_2021_2023.csv` (família `ideb_planilha`)
+
+| Campo | Valor |
+|---|---|
+| Fonte | SEEDF, formato largo (uma coluna por ano/indicador) |
+| Granularidade | escola (rede pública) |
+| Observações | 734 linhas nas três etapas; usado como conferência do formato longo |
+
+### `*_educa_escola_infraestrutura_tecnologia_*.csv` (família `tecnologia`)
+
+| Campo | Valor |
+|---|---|
+| Fonte | SEEDF |
+| Anos cobertos | 2023 e 2024 |
+| Granularidade | escola × turno |
+| Chave primária | `Cód. Inep` |
+| Observações | 41 colunas com rótulos legíveis (`Computadores`, `Lousa digital`). Não usado nas respostas desta sessão |
+
+### `lista_unidades_educacao_infantil_csv_2023.csv` (família `unidades_ei`)
+
+| Campo | Valor |
+|---|---|
+| Fonte | SEEDF |
+| Granularidade | unidade com oferta de educação infantil (pública, conveniada e privada) |
+| Nº de linhas | 468 |
+| Observações | traz coordenadas e e-mail institucional; e-mail **não** é usado (dado de contato, fora do escopo) |
+
+### `unidades-ef-*.csv`, `unidades-em.csv` (família `unidades_oferta`)
+
+| Campo | Valor |
+|---|---|
+| Fonte | SEEDF |
+| Granularidade | unidade × etapa ofertada (rede pública) |
+| Nº de linhas | 420 (EF anos iniciais), 224 (EF anos finais), 90 (EM) |
+| Observações | o mesmo conjunto é republicado em outro dataset (`unidades-escolares-...-por-oferta`) |
+
+### `pdad_a_2024_*.pdf` (IPEDF, fora da SEEDF)
+
+| Campo | Valor |
+|---|---|
+| Fonte | IPEDF — PDAD-A 2024 (`https://pdad.ipe.df.gov.br/`) |
+| Granularidade | Região Administrativa (relatório por RA) |
+| Dado extraído | população por faixa etária e sexo, tabela 2 de cada relatório |
+| Faixa disponível | **`até 4 anos`** — não existe faixa 0–3 |
+| Observações | 53 PDFs, medidos: 35 RAs do DF, 12 municípios goianos da área de influência e 6 documentos que não são RA (total do DF, DF rural, dicionário de dados, base de domicílios, base de morador, questionário). Só as 35 RAs entram na análise. População é **estimativa amostral**, não contagem censitária. O Censo 2022 via API do IBGE chega ao DF como um município único (`5300108`); população por idade e RA exigiria os agregados por setor censitário e uma chave setor → RA, que não foram ingeridos |
+
+### `2026-10-22_regioes_administrativas_df.geojson` (GDF/IDE, fora da SEEDF)
+
+| Campo | Valor |
+|---|---|
+| Fonte | GDF — Geoserviços do IDE/DF, camada "Regiões Administrativas" (`https://www.geoservicos.ide.df.gov.br/arcgis/rest/services/Publico/LIMITES/FeatureServer/1`), baixada em 2026-10-22 por `09_download_malha.py` |
+| Conteúdo | GeoJSON em EPSG:4326 com 37 feições (4,58 MB); o serviço declara EPSG:31983 (SIRGAS 2000 / UTM 23S) |
+| Atributos | `ra_nome`, `ra_codigo` (`RA-IX`…), `ra_cira` (1–37), `ra_areakm2`, `ra_path` (link da monografia da RA) |
+| Granularidade | uma feição por Região Administrativa |
+| Validação | `data/interim/malha_ra_validacao.csv`: 35 das 37 RAs aparecem no cadastro da SEEDF de 2025 e na PDAD-A 2024; `26 DE SETEMBRO` (RA-XXXVI) e `PONTE ALTA` (XXXVII) existem só na malha; nenhuma RA presente nas duas fontes falta na malha. Nomes normalizados com a mesma regra de `06_analysis.py` |
+| Uso | **nenhum uso geoespacial nesta sessão**: nenhuma análise usa geometria e não há mapa. A validação é de procedência, CRS e concordância de nome/código — a condição que o projeto exige antes de `geopandas`/`shapely` entrar em `requirements.txt` |
+| Cautela | a malha é de 2025 e tem 37 RAs; o Censo 2022 não delimitou Arapoanga e Água Quente (incluídas em Planaltina e Recanto das Emas, segundo o Informe Demográfico do IPEDF), e as séries de educação de 2024/2025 têm 35 RAs. Qualquer junção por RA precisa declarar a versão da malha |
+
+### `divulgacao_regioes_ufs_ideb_2025.zip` (INEP)
+
+| Campo | Valor |
+|---|---|
+| Fonte | INEP — divulgação do Ideb 2025 (`download.inep.gov.br/ideb/resultados/`), ingerida em 2026-10-22 pelo caminho manual descrito em "INEP: catálogo e o que entrou" |
+| Conteúdo do zip | `.xlsx` e `.ods` equivalentes, mais `md5_divulgacao_regioes_ufs_ideb_2025.txt` |
+| Granularidade | `etapa × local × rede × ano`; `local` é uma das 27 UFs ou uma das 5 regiões. **Não existe linha "Brasil"** neste arquivo |
+| Etapas | três abas: `UF e Regiões (AI)`, `UF e Regiões (AF)`, `UF e Regiões (EM)`. Os rótulos internos dizem o recorte: "Ensino Fundamental Regular - Anos Iniciais/Finais" e "Ensino Médio Regular". O médio **com o integrado à EPT** tem arquivo próprio, com bloco abaixo |
+| Variáveis | `VL_OBSERVADO_2005` … `VL_OBSERVADO_2025` (Ideb observado) e `VL_PROJECAO_2007` … `VL_PROJECAO_2021` (meta). As outras ~100 colunas são taxa de aprovação, indicador de rendimento e notas de português/matemática do SAEB |
+| Layout | planilha formatada: 5 linhas de título, cabeçalho em três faixas (linhas 7–9), códigos de variável na linha 10, dados da linha 11 em diante. `read_excel` direto devolve a linha de título como cabeçalho e não serve |
+| Normalização | `scripts/08_profile_inep.py` (`processar_ideb_uf`) → `data/interim/inep/ideb_uf_tidy.parquet`: 6.688 linhas, colunas `etapa`, `local`, `rede`, `ano`, `indicador`, `valor`, `rede_base`, `marcadores_nota` |
+| Nomes de campo | só os da INEP, verbatim. `rede` preserva o rótulo completo (`Total (3)(4)`); `rede_base` remove o marcador e `marcadores_nota` guarda o dígito |
+| Marcadores de nota | `(1)`–`(7)` no rótulo de `rede` são **ressalvas históricas**, não condições de todos os anos: `(1)`/`(2)`/`(3)` tratam de 2009, `(4)` de 2011 (SAEB 2011 sem as escolas federais), `(5)` da pandemia em 2021. O DF traz `Total (4)` em 2025, mas o `(4)` se refere a 2011 |
+| Ausências | UF sem resultado simplesmente não tem valor (`NaN`) naquele ano e naquela rede. `AI`/`Estadual` tem 26 UFs porque Roraima não tem Ideb de rede estadual em 2025; a aba do ensino médio não publica linha `Pública` para nenhuma UF |
+| Recorte | **todas as UFs foram mantidas**, não só o DF: a tabela inteira tem 152 linhas e sem as outras 26 não existe comparação. É exceção documentada à regra de recorte no DF (que vale para microdados) |
+| Idempotência | 08 reescreve o parquet a partir do zip; 07 não reingere arquivo já registrado (confere sha256) |
+
+### `divulgacao_brasil_ideb_2025.zip` (INEP)
+
+| Campo | Valor |
+|---|---|
+| Fonte | INEP — divulgação do Ideb 2025 (`download.inep.gov.br/ideb/resultados/`), ingerida em 2026-10-22 pelo caminho manual de "INEP: catálogo e o que entrou" |
+| Conteúdo do zip | `.xlsx` e `.ods` equivalentes, mais `md5_divulgacao_brasil_ideb_2025.txt` |
+| Granularidade | `etapa × rede × ano`; a primeira coluna é sempre `Brasil` — é a linha que a planilha de UF não tem |
+| Etapas | três abas: `Brasil (Anos Iniciais)`, `Brasil (Anos Finais)`, `Brasil (EM)` — fundamental regular e médio regular, os mesmos recortes da planilha de UF |
+| Redes | AI e AF: `Total`, `Estadual`, `Municipal`, `Pública`, `Privada`; EM: `Total`, `Estadual`, `Pública`, `Privada` (não há `Municipal`) |
+| Layout | 5 linhas de título, cabeçalho em três faixas (7–9), códigos na linha 10, dados da 11 em diante |
+| **Armadilha** | na aba `Brasil (Anos Finais)` a célula de código do Ideb de 2023 está **vazia**, mas a coluna tem valor (5,0). `processar_brasil()` preenche o código a partir da faixa de cabeçalho (`IDEB 2023 (N x P)`, coluna 111). Ler só a linha de códigos perderia o Ideb de 2023 do Brasil nos anos finais |
+| Variáveis | `VL_OBSERVADO_YYYY` (Ideb observado) e `VL_PROJECAO_YYYY` (meta do 1º ciclo, 2007–2021); o resto são taxa de aprovação, indicador de rendimento e notas do SAEB |
+| Normalização | `scripts/08_profile_inep.py` (`processar_brasil`) → `data/interim/inep/brasil_ideb_tidy.parquet`: 266 linhas, mesmo esquema de `ideb_uf_tidy.parquet` (`etapa`, `local`, `rede`, `ano`, `indicador`, `valor`, `rede_base`, `marcadores_nota`), para empilhar sem tradução |
+| Marcadores de nota | `Privada (1)` na aba de anos iniciais: o `(1)` é ressalva de 2009 (SAEB só urbano), não de 2025. Preservado em `rede`, separado em `rede_base` e `marcadores_nota` |
+| Ausências | rede/ano sem resultado publicado simplesmente não tem valor. As linhas de fonte e notas ocupam a mesma primeira coluna e são descartadas pelo filtro `local == 'Brasil'` |
+
+### `divulgacao_anos_iniciais_escolas_2025.zip`, `divulgacao_anos_finais_escolas_2025.zip`, `divulgacao_ensino_medio_escolas_2025.zip` (INEP)
+
+| Campo | Valor |
+|---|---|
+| Fonte | INEP — Ideb por escola 2025, download manual, ingerido em 2026-10-22 |
+| Conteúdo do zip | `.xlsx`, `.ods` e `md5_*.txt`; uma aba por arquivo (`IDEB_Escolas (...)`) |
+| Granularidade | escola × ano × indicador, depois de normalizado (a planilha original é escola × ano em colunas) |
+| Chave primária | `ID_ESCOLA` + `ano` + `indicador` (0 duplicatas nos três arquivos) |
+| Layout | 5 linhas de título, cabeçalho em três faixas (7–9), códigos na linha 10 (`SG_UF`, `CO_MUNICIPIO`, `NO_MUNICIPIO`, `ID_ESCOLA`, `NO_ESCOLA`, `REDE`, `VL_*`), dados da 11 em diante; fonte e notas no rodapé, na mesma coluna `SG_UF`, descartadas pelo filtro de UF |
+| Linhas lidas | AI: 66.154 nacionais, 426 do DF; AF: 48.021 e 230; EM: 22.185 e 144 |
+| Redes no DF | AI: 426 `Estadual`; AF: 229 `Estadual` + 1 `Federal`; EM: 96 `Estadual` + 11 `Federal` + 37 `Privada`. Não há rede municipal no DF |
+| Anos | AI e AF: 2005–2025 (bienal); EM: 2017–2025 |
+| Recorte | `SG_UF == 'DF'` em leitura streaming (`openpyxl` `read_only`), sem carregar a planilha inteira; conferido que todo `CO_MUNICIPIO` resultante é `5300108` (o DF tem um município). As 26 outras UFs são lidas e descartadas; nenhum parquet nacional é gravado |
+| Vocabulário de ausência | `'-'` = **sem resultado divulgado** (não participou do Saeb, participação abaixo do critério da Portaria nº 435/2025, ou resultado não publicado). Fica preservado em `valor_bruto`; `valor` é nulo; `estado = 'ausente'`. Não há `nao_aplicavel`: a planilha só publica a coluna do ano em que a etapa é avaliada. Nenhum zero foi imputado. No recorte do DF o único token não numérico encontrado é `'-'`; célula vazia, se aparecesse, entraria como `ausente` pelo mesmo caminho |
+| Renomes | campos espelhados mantêm o nome da INEP (`SG_UF`, `CO_MUNICIPIO`, `NO_MUNICIPIO`, `ID_ESCOLA`, `NO_ESCOLA`, `REDE`). Derivados: `etapa` (AI/AF/EM), `ano` (sufixo de `VL_*_YYYY`), `indicador` (`ideb_observado`/`ideb_projetado`), `valor` (numérico), `valor_bruto` (texto: `'-'` ou o número formatado, ex. `6.4`), `estado` (`valor`/`zero`/`ausente`) |
+| Normalização | `data/interim/inep/ideb_escolas_df.parquet`: 13.472 linhas longas, 624 escolas distintas, só DF |
+| Achado de cobertura | a rede privada **não existe** nas planilhas de AI/AF em nenhuma UF (só `Municipal`, `Estadual`, `Federal`); na de EM há 1.247 linhas privadas no país, 851 com valor, todas de 2017 — de 2019 em diante a célula é `'-'` em todas. No DF: 37 escolas privadas de médio, 19 com Ideb em 2017, nenhuma em 2023 ou 2025 |
+| Conferência | o recorte da INEP bate valor a valor com a série que a SEEDF republica: 3.512 valores em AI, 1.542 em AF, 222 em EM, 0 divergências (`data/interim/q8_conferencia_seedf.csv`) |
+
+**Ideb observado × projetado.** `VL_OBSERVADO_YYYY` vira `indicador = 'ideb_observado'`;
+`VL_PROJECAO_YYYY` vira `indicador = 'ideb_projetado'`, que é a **meta do 1º ciclo**
+(2007–2021), não uma projeção de resultado futuro. As colunas de projeção terminam
+em 2021 e não há meta para 2023 nem 2025, coerente com a nota informativa. Em
+nenhum CSV do projeto `ideb_projetado` entra como valor observado ou em média.
+
+### `divulgacao_ufs_Ensino_Medio_integrado_ideb_2025.xlsx` (INEP)
+
+| Campo | Valor |
+|---|---|
+| Fonte | INEP — Ideb do ensino médio **com o integrado à EPT**, por UF (`download.inep.gov.br/ideb/resultados/`), ingerida em 2026-10-22 pelo caminho manual |
+| Conteúdo | planilha solta (não vem em zip), 31.398 B — o catálogo previa 21.287 B; vale o tamanho do arquivo que entrou, registrado no `MANIFEST.md` |
+| Granularidade | `local × rede × ano`; `local` é uma das 27 UFs, sem regiões e **sem linha Brasil**; `rede` é sempre `Estadual` |
+| Layout | uma aba (`UF (EM_integrado)`), 5 linhas de título, cabeçalho em três faixas (7–9), códigos na linha 10, dados da 11 em diante. A primeira coluna é o **nome da UF por extenso**, sem código |
+| Anos | 2017–2025 (bienal); só `VL_OBSERVADO_YYYY`, sem projeções nem metas |
+| Diferença de recorte | inclui, no Saeb, os estudantes do médio propedêutico **e** da educação profissional técnica integrada ao médio; a divulgação regular exclui os do integrado para preservar a comparabilidade histórica (nota `*` da própria planilha) |
+| Normalização | `processar_uf_em_integrado()` (08) → `data/interim/inep/ideb_uf_em_integrado_tidy.parquet`: 135 linhas (27 UFs × 5 anos), colunas `etapa` (`EM_integrado`), `local`, `local_base`, `rede`, `ano`, `indicador`, `valor`, `valor_bruto` |
+| Nomes | três UFs mudam de forma entre as planilhas: `R. G. do Norte` ↔ `Rio Grande do Norte`, `R. G. do Sul` ↔ `Rio Grande do Sul`, `M. G. do Sul` ↔ `Mato Grosso do Sul`. `local` mantém o nome do arquivo; `local_base` normaliza, com o mapa em `UFS_POR_EXTENSO` no 08 |
+| Resultado | DF `Estadual`: 3,7 em 2023 (18º de 27) e 3,6 em 2025 (**27º de 27**) — as mesmas posições do médio regular. A inclusão muda 10–11 UFs em 0,1–0,2, não o DF (`data/interim/q9_em_integrado.csv`) |
+| Uso | `q9` de `06_analysis.py`; §2.4 do relatório cita os dois recortes lado a lado |
+
+### `tx_rend_escolas_2025.zip` (INEP)
+
+| Campo | Valor |
+|---|---|
+| Fonte | INEP — Taxas de Rendimento Escolar 2025 (`download.inep.gov.br/informacoes_estatisticas/indicadores_educacionais/2025/`), ingerido em 2026-10-22 pelo caminho manual |
+| Conteúdo | `.xlsx`, `.ods` e `md5_tx_rend_escolas_2025.txt`; uma aba (`ESCOLAS`) |
+| Granularidade | escola × etapa/série × categoria de rendimento (formato longo depois da normalização) |
+| Chave primária | `CO_ENTIDADE` + `campo` (0 duplicatas) |
+| Layout | 5 linhas de título, cabeçalho em três faixas (6–8), códigos na linha 9, dados da 10 em diante; 63 colunas |
+| Campos | identificação `NU_ANO_CENSO`, `NO_REGIAO`, `SG_UF`, `CO_MUNICIPIO`, `NO_MUNICIPIO`, `CO_ENTIDADE`, `NO_ENTIDADE`, `NO_CATEGORIA` (localização), `NO_DEPENDENCIA`; 54 taxas `1_CAT_*` (aprovação), `2_CAT_*` (reprovação), `3_CAT_*` (abandono), nos recortes `FUN`, `FUN_AI`, `FUN_AF`, `FUN_01`…`FUN_09`, `MED`, `MED_01`…`MED_04`, `MED_NS` |
+| Linhas lidas | 126.686 nacionais, 925 do DF (578 `Estadual`, 336 `Privada`, 11 `Federal`); as 925 casam com o cadastro de 2025 |
+| Vocabulário | `'--'` = **não aplicável** (sem matrícula naquela etapa/série), `estado = nao_aplicavel`; célula vazia = `ausente`; `0` = zero real (abandono zero é comum). O texto fica em `valor_bruto` |
+| Normalização | `processar_tx_rend()` (08) → `data/interim/inep/tx_rend_escolas_df.parquet`: 49.950 linhas longas, colunas `NU_ANO_CENSO`, `SG_UF`, `CO_MUNICIPIO`, `NO_MUNICIPIO`, `CO_ENTIDADE`, `NO_ENTIDADE`, `NO_CATEGORIA`, `NO_DEPENDENCIA`, `campo`, `categoria`, `recorte`, `valor`, `valor_bruto`, `estado` |
+| Conferência | aprovação + reprovação + abandono = 100 em 7.412 pares escola × recorte (desvio máximo 1,4e-14) |
+| Uso | `q10` de `06_analysis.py`; §2.2 do relatório |
+
+### `TDI_2025_ESCOLAS.zip` (INEP)
+
+| Campo | Valor |
+|---|---|
+| Fonte | INEP — Taxa de Distorção Idade-Série por Escola 2025 (`download.inep.gov.br/informacoes_estatisticas/indicadores_educacionais/2025/`), ingerida em 2026-10-22 pelo caminho manual |
+| Conteúdo | 34.465.795 B; quatro membros: pasta `TDI_2025_ESCOLAS/`, `MD5_TDI_ESCOLAS_2025.txt`, `TDI_ESCOLAS_2025.ods` e `TDI_ESCOLAS_2025.xlsx` (18.462.946 B, o lido) |
+| Aba | uma (`ESCOLAS`) |
+| Layout | 8 linhas de título (faixas de cabeçalho nas 6–7), **códigos na linha 9**, dados da 10 em diante; 26 colunas com código |
+| Campos | identificação `NU_ANO_CENSO`, `NO_REGIAO`, `SG_UF`, `CO_MUNICIPIO`, `NO_MUNICIPIO`, `CO_ENTIDADE`, `NO_ENTIDADE`, `NO_CATEGORIA` (localização), `NO_DEPENDENCIA`; 17 taxas no padrão `<recorte>_CAT_0`: `FUN`, `FUN_AI`, `FUN_AF`, `FUN_01`…`FUN_09`, `MED`, `MED_01`…`MED_04`. **Não tem `MED_NS`** — a TNR tem, e por isso o leitor não pode compartilhar a lista de colunas entre os dois arquivos |
+| Granularidade | escola × recorte (uma taxa por célula; formato longo depois da normalização) |
+| Chave primária | `CO_ENTIDADE` + `campo` (0 duplicatas) |
+| Anos | 2025 apenas |
+| Linhas lidas | 126.607 nacionais, 925 do DF (578 `Estadual`, 336 `Privada`, 11 `Federal`); as 925 casam com o cadastro de 2025 (`CO_ENTIDADE`, 100%, 0 fora) |
+| Vocabulário | `'--'` = **não aplicável** (sem matrícula naquele recorte), `estado = nao_aplicavel`; célula vazia = `ausente`; `0` = zero medido e entra nas estatísticas. No DF: 7.920 `nao_aplicavel`, 1.787 zeros, 0 ausentes |
+| Normalização | `processar_indicador_escola()` (08) → `data/interim/inep/tdi_escolas_df.parquet`: 15.725 linhas longas, colunas `indicador`, `NU_ANO_CENSO`, `NO_REGIAO`, `SG_UF`, `CO_MUNICIPIO`, `NO_MUNICIPIO`, `CO_ENTIDADE`, `NO_ENTIDADE`, `NO_CATEGORIA`, `NO_DEPENDENCIA`, `campo`, `recorte`, `valor`, `valor_bruto`, `estado` |
+| Renomes | nenhum campo de origem renomeado; derivados `indicador` (`distorcao_idade_serie`), `recorte` (extraído do código), `valor` (numérico), `valor_bruto` (texto) e `estado` |
+| Uso | `q11` de `06_analysis.py`; §2.2, §2.4 e §2.6 do relatório |
+| Limite | taxa por escola, não ponderada por matrícula: a mediana descreve a escola típica da rede, não o aluno típico |
+
+### `tnr_escolas_2025.zip` (INEP)
+
+| Campo | Valor |
+|---|---|
+| Fonte | INEP — Taxa de Não-Resposta (TNR) por Escola 2025 (`download.inep.gov.br/informacoes_estatisticas/indicadores_educacionais/2025/`), ingerida em 2026-10-22 pelo caminho manual |
+| Conteúdo | 30.600.051 B; quatro membros: pasta `tnr_escolas_2025/`, `md5_tnr_escolas_2025.txt`, `tnr_escolas_2025.ods` e `tnr_escolas_2025.xlsx` (17.727.021 B, o lido) |
+| Aba | uma (`ESCOLAS`) |
+| Layout | 8 linhas de título, **códigos na linha 9**, dados da 10 em diante; 27 colunas com código |
+| Campos | as mesmas nove colunas de identificação da TDI; 18 taxas no padrão **`4_CAT_<recorte>`** — `FUN`, `FUN_AI`, `FUN_AF`, `FUN_01`…`FUN_09`, `MED`, `MED_01`…`MED_04`, `MED_NS`. A categoria (4 = não-resposta) vem antes do recorte; na TDI vem depois (`FUN_AI_CAT_0`). São padrões diferentes, e o leitor é parametrizado por eles |
+| O que mede | percentual de alunos **sem informação de rendimento/movimento escolar** no Censo Escolar 2025. **Não é participação no SAEB** e não tem campo que separe não participação de resultado suprimido |
+| Granularidade | escola × recorte |
+| Chave primária | `CO_ENTIDADE` + `campo` (0 duplicatas) |
+| Anos | 2025 apenas |
+| Linhas lidas | 126.687 nacionais, 925 do DF (578 `Estadual`, 336 `Privada`, 11 `Federal`); as 925 casam com o cadastro de 2025 (100%, 0 fora) |
+| Vocabulário | `'--'` = **não aplicável**, `estado = nao_aplicavel`; célula vazia = `ausente`; `0` = zero medido (não-resposta zero é comum). No DF: 8.845 `nao_aplicavel`, 3.545 zeros, 0 ausentes |
+| Normalização | `processar_indicador_escola()` (08) → `data/interim/inep/tnr_escolas_df.parquet`: 16.650 linhas longas, mesmo esquema de `tdi_escolas_df.parquet`, com `indicador = 'taxa_nao_resposta'` |
+| Hipótese testada | o catálogo previa que a TNR dissesse, por escola, se o Ideb ausente é não participação ou resultado suprimido. **Falhou:** a TNR não tem esse campo, e as distribuições das escolas com e sem Ideb se sobrepõem (medianas 1,3 × 1,3 nos anos iniciais, 1,9 × 2,5 nos finais, 2,0 × 1,8 no médio; as sem Ideb são 39, 34 e 32 escolas com taxa). O que ela acrescenta é a distinção `'--'` = etapa não ofertada, confirmada pelo cadastro em 42 de 44 e 37 de 38 casos |
+| Uso | `q12` de `06_analysis.py`; §2.2, §2.4 e §5 do relatório |
+
+### `nota_informativa_ideb_2025.pdf` (INEP)
+
+| Campo | Valor |
+|---|---|
+| Fonte | INEP — Nota informativa do Ideb 2025 (`download.inep.gov.br/ideb/resultados/`), ingerida em 2026-10-22 |
+| Granularidade | documento (8 páginas), não é tabela; lido manualmente, não convertido |
+| Fatos usados | metodologia inalterada desde 2007; 2023 e 2025 comparáveis às edições anteriores e **sem metas**; última divulgação na formulação original (a próxima edição quebra a série) |
+| Critérios de não-cálculo | Portaria nº 435/2025: (H) menos de 10 estudantes presentes no SAEB; (I) participantes abaixo de 80% dos matriculados na etapa. O Quadro 1 do documento dá o número de escolas com e sem Ideb por motivo |
+| Uso no relatório | base da regra de três estados: escola sem Ideb é ausência com causa declarada, nunca zero |
+
+## Chaves e cruzamentos
+
+Taxas medidas por `scripts/04_crosswalk.py`, chave `CO_ENTIDADE`. "Órfãos em
+para" = códigos no outro arquivo que não existem no cadastro daquele ano.
+
+| De → Para | Campo de origem | Campo de destino | Casados | Taxa | Órfãos notáveis |
+|---|---|---|---|---|---|
+| escolas 2024 → matrículas 2024 | `CO_ENTIDADE` | `CO_ENTIDADE` | 1.284 de 1.284 | 100% | 0 |
+| escolas 2025 → matrículas 2025 | `CO_ENTIDADE` | `Código INEP` | 1.291 de 1.291 | 100% | 41 no arquivo de matrículas (escolas fora do cadastro de 2025) |
+| escolas 2023 → matrículas 2023 | `CO_ENTIDADE` | `CO_ENTIDADE` | 600 de 1.264 | 47,5% | o arquivo de 2023 só tem rede pública |
+| escolas 2024 → infraestrutura 2024 | `CO_ENTIDADE` | `CO_ENTIDADE` | 1.284 de 1.284 | 100% | 41 |
+| escolas 2025 → infraestrutura 2025 | `CO_ENTIDADE` | `CO_ENTIDADE` | 1.291 de 1.291 | 100% | 180 (inclui paralisadas e extintas) |
+| escolas 2025 → situação 2025 | `CO_ENTIDADE` | `CO_ENTIDADE` | 604 de 1.291 | 46,8% | a situação só cobre a rede estadual |
+| escolas 2023 → situação 2023 | `CO_ENTIDADE` | `CO_ENTIDADE` | 658 de 1.264 | 52,1% | idem |
+| escolas 2025 → IDEB 2025 (AI) | `CO_ENTIDADE` | `cod_inep` | 615 de 1.291 | 47,6% | 9 códigos no IDEB sem cadastro em 2025 |
+| escolas 2023 → IDEB 2023 (AI) | `CO_ENTIDADE` | `cod_inep` | 613 de 1.264 | 48,5% | 11 |
+| escolas 2023 → unidades EI 2023 | `CO_ENTIDADE` | `CO_ENTIDADE` | 445 de 1.264 | 35,2% | 20 |
+| escolas 2025 → TDI 2025 | `CO_ENTIDADE` | `CO_ENTIDADE` | 925 de 925 | 100% | 0 no arquivo da INEP; das 366 escolas do cadastro sem linha, 364 não ofertam fundamental nem médio e 2 ofertam (uma estadual, uma conveniada) |
+| escolas 2025 → TNR 2025 | `CO_ENTIDADE` | `CO_ENTIDADE` | 925 de 925 | 100% | idem |
+| Ideb 2025 (por escola) → TNR 2025 | `ID_ESCOLA` | `CO_ENTIDADE` | 611 de 624 | 97,9% | 13 fora da TNR: 8 estaduais de iniciais, 2 de finais e 5 privadas de médio; 9 dessas 13 também não estão no cadastro de 2025; 615 de 624 estão |
+
+Leitura: a chave não é o problema — `CO_ENTIDADE` casa 100% quando os dois
+arquivos cobrem o mesmo universo. As taxas baixas medem **cobertura**, não falha
+de chave. Nenhum join nesta sessão foi feito sem taxa medida. As 925 escolas da
+TDI/TNR são exatamente as que ofertam fundamental ou médio em 2025: 575 de 576
+estaduais, 336 de 337 privadas e 11 de 11 federais — as duas sem linha são uma
+estadual e uma conveniada.
+
+### Nomes de Região Administrativa
+
+36 valores no cadastro de 2025 para 35 RAs (a PDAD-A e o GDF usam 35). Fontes
+escrevem diferente e é preciso normalizar:
+
+| Cadastro SEEDF | PDAD-A 2024 | Normalizado |
+|---|---|---|
+| `SOL NASCENTE / POR DO SOL` | `SOL NASCENTE E PÔR DO SOL` | `SOL NASCENTE / POR DO SOL` |
+| `SUDOESTE / OCTOGONAL` | `SUDOESTE/OCTOGONAL` | `SUDOESTE / OCTOGONAL` |
+| `SCIA` | `SCIA/ESTRUTURAL` | `SCIA` |
+| `AGUAS CLARAS ` (com espaço) | `XX - ÁGUAS CLARAS` | `AGUAS CLARAS` |
+
+## Mudanças de esquema entre anos
+
+| Arquivo | Ano | O que mudou |
+|---|---|---|
+| escolas | 2025 | 74 → 81 colunas; nomes de variável → rótulos legíveis; nova coluna `Tipologia`; linha de título acima do cabeçalho |
+| escolas | 2014–2023 | esquema estável em 74 colunas |
+| matrículas | 2024 | 64 → 63 colunas (sai uma coluna `MAT_*`) |
+| matrículas | 2025 | 73 colunas com rótulos legíveis; `Código INEP` no lugar de `CO_ENTIDADE`; só em XLSX |
+| matrículas | 2023 | arquivo parcial: apenas rede pública (600 escolas contra ~1.280 nos demais anos); coluna extra `MATRÍCULA` |
+| infraestrutura | 2016 | arquivo rotulado 2016 contém 2017 e é idêntico ao de 2017 — **2016 não existe** |
+| infraestrutura | 2025 | 114 → 289 colunas; inclui escolas paralisadas/extintas; `TP_DEPENDENCIA` deixa de separar conveniada |
+| situação | 2025 | 73 → 27 colunas; só totais por escola (2.421 linhas contra ~72.000) |
+| situação | 2019 | 126.672 linhas contra ~72.000 nos demais anos; inclui rede federal |
+| distorção | 2024 | nomes de variável → rótulos legíveis, duas linhas de cabeçalho, 30 → 26 colunas |
+| IDEB | — | cabeçalho e separador diferentes entre anos iniciais (`;`, `cod_inep`) e anos finais/médio (`,`, `Cód_Inep`) |
+
+## INEP: catálogo e o que entrou
+
+Catálogo declarado em `scripts/07_ingest_inep.py`; a ingestão é manual porque
+`download.inep.gov.br` bloqueia o `urllib`/`curl` deste ambiente e responde pelo
+navegador. `data/raw/inep/inbox/` recebe os arquivos, 07 registra procedência e
+sha256 no `MANIFEST.md`, 08 perfila o conteúdo e normaliza. Dez entraram e têm
+bloco próprio acima; não falta nenhum item do catálogo.
+
+| Arquivo | O que acrescenta | Situação |
+|---|---|---|
+| `divulgacao_regioes_ufs_ideb_2025.zip` | Ideb por UF: situa o DF no país | **ingerido** (2026-10-22) |
+| `nota_informativa_ideb_2025.pdf` | metodologia e escala do Ideb 2025 | **ingerido** (2026-10-22, 551.360 B) |
+| `divulgacao_brasil_ideb_2025.zip` | Ideb do Brasil (a planilha de UF não tem a linha Brasil) | **ingerido** (2026-10-22) |
+| `divulgacao_ufs_Ensino_Medio_integrado_ideb_2025.xlsx` | ensino médio **com o integrado à EPT**, rede estadual por UF: testa o último lugar do DF no médio regular | **ingerido** (2026-10-22, 31.398 B) |
+| `divulgacao_anos_iniciais_escolas_2025.zip` | Ideb por escola, todas as redes (AI) | **ingerido** (2026-10-22) |
+| `divulgacao_anos_finais_escolas_2025.zip` | idem, anos finais | **ingerido** (2026-10-22) |
+| `divulgacao_ensino_medio_escolas_2025.zip` | idem, ensino médio | **ingerido** (2026-10-22) |
+| `tx_rend_escolas_2025.zip` | aprovação/reprovação/abandono por escola, todas as redes | **ingerido** (2026-10-22, 66.870.247 B) |
+| `TDI_2025_ESCOLAS.zip` | distorção idade-série por escola, todas as redes | **ingerido** (2026-10-22, 34.465.795 B) |
+| `tnr_escolas_2025.zip` | taxa de não-resposta por escola; **não** distingue não participação de supressão (ver bloco) | **ingerido** (2026-10-22, 30.600.051 B) |
+
+Chave de ligação com o que já existe: `CO_ENTIDADE`. A INEP nem sempre usa esse
+nome (`CO_ESCOLA` aparece em indicadores por escola) — conferir no cabeçalho e
+registrar aqui antes de qualquer join. Nenhum join com a INEP é feito sem taxa de
+casamento medida, como os demais. Os três arquivos de Ideb por escola usam
+`ID_ESCOLA` (o mesmo código de 8 dígitos); a ligação com o cadastro de 2025 foi
+medida em `data/interim/q8_cobertura_escolas_2025.csv`. A TDI e a TNR usam
+`CO_ENTIDADE`: 925 de 925 escolas do DF casadas (100%, 0 fora) com o cadastro de
+2025, medido por `medir_juncao_cadastro()` no 08 a cada execução.

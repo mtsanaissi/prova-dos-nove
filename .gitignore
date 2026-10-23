@@ -1,0 +1,17 @@
+# dados: baixados ou derivados nunca entram no repositório
+data/raw/*
+!data/raw/MANIFEST.md
+data/interim/
+
+# ambiente
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# notebooks
+.ipynb_checkpoints/
+
+# sistema
+.DS_Store
+Thumbs.db
