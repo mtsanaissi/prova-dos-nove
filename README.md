@@ -71,19 +71,27 @@ escondido: nenhum script finge que baixou o que não baixou.
 ## Estado
 
 **Fase 0 — reconhecimento.** A sessão de 2026-10-22 fechou o inventário e
-respondeu às seis perguntas da fase; a sessão de 2026-10-23 abriu os microdados
-da PDAD-A 2024 e corrigiu duas contas de método (creche e biblioteca). A etapa
-não está completa: falta o Ideb por escola das escolas privadas, que a INEP não
+respondeu às seis perguntas da fase; a de 2026-10-23 abriu os microdados da
+PDAD-A 2024 e corrigiu duas contas de método (creche e biblioteca). A etapa não
+está completa: falta o Ideb por escola das escolas privadas, que a INEP não
 publica depois de 2017 (`REPORT.md` §5). Ainda não há produto: há inventário,
-dicionário de dados e as respostas que os dados já permitem. Fontes baixadas e
-verificadas: 80 arquivos da SEEDF, 53 arquivos da PDAD-A (50 relatórios, dois
-microdados e o dicionário), 10 arquivos da INEP e a malha das RAs, todos com
-sha256 no manifesto. O escopo, os números e os vereditos estão em
-[`REPORT.md`](REPORT.md); os campos de cada arquivo, em
-[`SCHEMA.md`](SCHEMA.md); o que foi feito em cada etapa, em
+dicionário de dados e as respostas que os dados já permitem.
+
+Fontes baixadas e verificadas, todas com sha256 no `MANIFEST.md` (144 linhas):
+80 arquivos da SEEDF (458 MB), 53 da PDAD-A (100 MB — 50 relatórios, dois
+microdados e o dicionário), 10 da INEP (345 MB) e a malha das RAs (4,6 MB). Os
+10 da INEP entraram à mão por `07`–`08`: Ideb 2025 por UF e por Brasil, os três
+arquivos por escola (iniciais, finais e médio), o médio com o integrado à EPT,
+as taxas de rendimento por escola, a distorção idade-série por escola, a taxa de
+não-resposta por escola e a nota informativa. A malha veio do serviço ArcGIS do
+IDE/DF (`09_download_malha.py`): 37 RAs, 35 com par no cadastro de 2025 e na
+PDAD-A 2024; `26 de Setembro` e `Ponte Alta` existem só na malha.
+
+O escopo, os números e os vereditos estão em [`REPORT.md`](REPORT.md); os campos
+de cada arquivo, em [`SCHEMA.md`](SCHEMA.md); o que foi feito em cada etapa, em
 [`docs/worklogs/`](docs/worklogs/).
 
-O que o reconhecimento já mostrou:
+### O que o reconhecimento já mostrou
 
 - **A creche não é da rede estadual.** Em 2025, 468 das 475 unidades que ofertam
   creche no DF são privadas ou conveniadas; a rede estadual tem 7.
@@ -91,19 +99,62 @@ O que o reconhecimento já mostrou:
 - **A reputação do DF no IDEB não vale para a rede pública.** Em 2025, a rede
   estadual do DF ficou em 16º de 26 nos anos iniciais, 21º de 27 nos anos finais
   e **última de 27 no ensino médio** (3,6 contra 4,3 do Brasil). O número alto
-  que circula é a linha "Total", que mistura a rede privada.
-  (`divulgacao_regioes_ufs_ideb_2025.zip`, `divulgacao_brasil_ideb_2025.zip`)
+  que circula é a linha "Total", que mistura a rede privada. Com o integrado à
+  EPT a estadual continua última (3,6). (`q8_df_brasil_uf.csv`,
+  `q9_em_integrado.csv`)
+- **Os arquivos nacionais por escola confirmam a série da SEEDF — e negam a
+  privada.** Reproduzem os valores da SEEDF valor por valor (3.512 + 1.542 + 222,
+  0 divergências) e não publicam Ideb de escola privada depois de 2017; a
+  cobertura privada existe só como agregado de rede nas planilhas de UF e Brasil.
+  (`q8_conferencia_seedf.csv`, `q8_escolas_rede.csv`)
 - **A desigualdade territorial existe, mas não é a manchete.** 38,5% da variância
   do IDEB de anos iniciais de 2025 está entre Regiões Administrativas — o resto
   está dentro da mesma RA. (`ideb_ef_ai_2005_2025.csv`)
-- **27% das crianças de 0 a 3 anos frequentam creche; a meta é 50%.** São 139.116
-  crianças na faixa e ~37.654 na creche — faltam ~31,9 mil. Quase toda a creche
-  pública é conveniada: a rede própria da SEEDF tem 0,3% da matrícula, e 57,3%
-  está na rede conveniada. (`pdad_frequencia.parquet`, `relatorio_matriculas_2024.csv`)
+- **27,1% das crianças de 0 a 3 anos frequentam creche; a meta é 50%.** São
+  139.116 crianças na faixa e ~37.654 na creche — faltam ~31,9 mil. Quase toda a
+  creche pública é conveniada: a rede própria da SEEDF tem 0,3% da matrícula, e
+  57,3% está na rede conveniada. (`pdad_frequencia.parquet`, `relatorio_matriculas_2024.csv`)
 - **A distorção idade-série separa as redes.** Em 2025, a mediana na rede
   estadual é 9,0% nos anos iniciais, 17,1% nos finais e 20,7% no médio; na
   privada, 1,2%, 3,2% e 4,5% — nos finais e no médio, o p10 da estadual fica
-  acima do p90 da privada. (`TDI_2025_ESCOLAS.zip`)
+  acima do p90 da privada. (`TDI_2025_ESCOLAS.zip`, `q11_distorcao_df.csv`)
+- **O fluxo separa as redes na mesma direção.** Em 2025, no ensino médio, a
+  mediana de aprovação é 98,3% na rede privada (139 escolas) contra 82,5% na
+  estadual (101), com abandono 0,0% contra 2,4%. (`tx_rend_escolas_2025.zip`,
+  `q10_fluxo_df.csv`)
+- **A não-resposta não explica o Ideb ausente.** A TNR mede falta de informação
+  de rendimento/movimento, não participação no SAEB; não tem campo que separe
+  não participação de supressão, e escolas com e sem Ideb têm a mesma
+  distribuição. TDI e TNR cobrem as mesmas 925 escolas do DF, todas casadas com
+  o censo de 2025 (100%), 336 delas privadas. (`tnr_escolas_2025.zip`,
+  `q12_tnr_ideb_ausente.csv`)
+
+Duas correções de método, em 2026-10-23: a leitura "36,2% da matrícula de creche
+é de 4 anos ou mais" (idade no ano do censo não é idade em 31/03) e o número de
+biblioteca (três itens da INEP — biblioteca, sala de leitura e a união dos dois —
+sobre um universo restrito às escolas que ofertam fundamental/médio).
+
+### O que falta
+
+- **Ideb por escola da rede privada.** A INEP não publica valor privado depois de
+  2017 em nenhum dos três arquivos por escola (`REPORT.md` §5).
+- **População de 0–3 por RA, com precisão.** O total do DF está resolvido pelos
+  microdados da PDAD-A; por RA o n vai de 14 a 184 pessoas e o meio-intervalo de
+  6 a 36 p.p., então RA entra como agrupamento, nunca como taxa. Só agregado por
+  setor censitário com chave setor → RA, ou uma PDAD-A com estrato e unidade
+  primária, resolveria. (`10_ingest_pdad.py`)
+- **Idade em 31/03.** A data de nascimento (`E02_1`) só está preenchida em 49,6%
+  das linhas (55,2% da população de 0–3), então a convenção de 31/03 não
+  substitui a idade na entrevista.
+- **Microdado do Censo Escolar por escola**, ainda não ingerido: é o que
+  resolveria a diferença de ~11,6 mil entre Censo e PDAD na creche.
+- **População por RA do Censo 2022**, não ingerida: a API do IBGE só alcança o
+  DF como um município.
+- **Fechamento de escola e infraestrutura de 2016.** 277 códigos somem da série
+  sem motivo declarado e o arquivo de 2016 é cópia de 2017 (`REPORT.md` §2.6).
+- **Mapa.** Nenhuma análise usa geometria: `CO_RA` entra como atributo, e as
+  bibliotecas geográficas seguem fora de `requirements.txt` até haver análise
+  espacial validada.
 
 ## Estrutura
 
