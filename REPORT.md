@@ -11,7 +11,10 @@ procedência em `data/raw/MANIFEST.md`.
 
 80 arquivos da SEEDF (458 MB), 53 PDFs da PDAD-A (100 MB), 10 arquivos da INEP
 (345 MB) e a malha das RAs (4,6 MB), todos com sha256 no `MANIFEST.md` (144
-linhas):
+linhas). Três dos 53 "PDFs" da PDAD-A não são relatórios: são os microdados
+(`moradores.csv` e `domicilios.csv`, em ZIP) e o dicionário em XLSX, lidos por
+`10_ingest_pdad.py` — a extensão errada está registrada em `MANIFEST.md` →
+Correções.
 
 | Conjunto SEEDF | Arquivos | Anos | Usado aqui |
 |---|---|---|---|
@@ -90,22 +93,48 @@ escolas contra ~1.280 nos demais anos).
 
 **2.3 Infraestrutura: que fração das escolas carece de cada item?**
 1.332 escolas em funcionamento em 2025 (`relatorio_infraestrutura_2025.csv`,
-excluídas 139 paralisadas/extintas):
+excluídas 139 paralisadas/extintas). O universo inclui 405 unidades que só
+ofertam educação infantil, onde laboratório, quadra e biblioteca não são
+exigência de norma nenhuma; por isso a tabela traz as duas leituras.
 
-| Item ausente | % das escolas |
-|---|---|
-| Biblioteca | 66,3% |
-| Laboratório de informática | 60,1% |
-| Quadra de esportes | 33,0% |
-| Nenhum recurso de acessibilidade | 2,4% |
-| Internet | 0,0% (todas as 1.332 declaram ter) |
-| Água potável | 0,0% (idem) |
-| Banheiro | 0,2% |
+| Item ausente | Todas as 1.332 | As 927 que ofertam EF/EM |
+|---|---|---|
+| Biblioteca (`IN_BIBLIOTECA`) | 66,3% | 60,6% |
+| Biblioteca nem sala de leitura (`IN_BIBLIOTECA_SALA_LEITURA`) | 17,2% | 6,0% |
+| Laboratório de informática | 60,1% | 53,0% |
+| Internet **para os alunos** (`IN_INTERNET_ALUNOS`) | 60,5% | 53,6% |
+| Quadra de esportes | 33,0% | 14,9% |
+| Nenhum recurso de acessibilidade | 2,4% | 2,5% |
+| Internet (existência) | 0,0% | 0,0% |
+| Água potável | 0,0% | 0,0% |
+| Banheiro | 0,2% | 0,1% |
 
-Por rede, a falta de biblioteca é 86,6% na privada conveniada, 75,7% na estadual
-e 48,7% na privada não conveniada. Por RA vai de 0% a 100%, com 2 a 17 escolas
-nos extremos: ordenação instável. Nas grandes, Ceilândia 78,7% (150), Santa
-Maria 83,3% (54), São Sebastião 80,0% (40), Plano Piloto 48,4% (188).
+Fonte: `data/interim/q3_infra_itens.csv` (todos os itens, nas duas colunas de
+universo) e `data/interim/q3_biblioteca.csv` (biblioteca, que precisa dos três
+itens separados e da dimensão do bibliotecário).
+
+A linha "internet" é a que engana: 100% das escolas declaram ter internet, e
+53,6% das que ofertam fundamental ou médio não declaram internet **para uso dos
+alunos** (o Censo tem campos separados para administrativo, aprendizagem e
+alunos; `IN_INTERNET` é existência, não acesso). Na rede estadual de EF/EM, 65,3%
+não têm internet para alunos, contra 36,1% na privada.
+
+Biblioteca é o item mais mal medido até aqui, e a correção é de universo e de
+nome. São **três dependências distintas** no dicionário da SEEDF:
+`IN_BIBLIOTECA` é biblioteca, `IN_SALA_LEITURA` é sala de leitura e
+`IN_BIBLIOTECA_SALA_LEITURA` é "biblioteca e/ou sala de leitura" — o OR exato dos
+outros dois, conferido nos 12 anos. Sala de leitura não é biblioteca; somá-las
+numa frase só transforma 6,0% em 60,6% e vice-versa. Entre as 927 escolas de
+EF/EM: **60,6% sem biblioteca**, 73,4% na estadual e 41,2% na privada não
+conveniada; **6,0% sem biblioteca nem sala de leitura** (Fercal 60,0% e Paranoá
+32,4% são os extremos, e são RAs pequenas); e, entre as 365 que têm biblioteca,
+**48,2% não têm bibliotecário** — 61,4% na estadual. A série 2014–2025, no mesmo
+universo, mostra falta de biblioteca estável entre 55,6% (2014) e 60,6% (2025) e
+falta de qualquer espaço de leitura entre 6,0% e 7,6%: o que não existe é pouco,
+e o que existe é frágil. Por RA a falta de biblioteca vai de 0% (Arniqueira, 1
+escola; Varjão, 1) a 100% (SIA, 2 escolas; Park Way, 6; Candangolândia, 4), com
+ordenação instável nos extremos; nas grandes, Ceilândia 76,1% (113), Santa Maria
+78,8% (33), São Sebastião 72,4% (29) e Plano Piloto 36,4% (118).
 
 **2.4 IDEB: o DF está entre os melhores do país? E a tese das "duas cidades"?**
 
@@ -213,25 +242,64 @@ etapa não ofertada em 42 e 37 — sem coorte, não é não participação. A hi
 catálogo falhou.
 
 **2.5 Creche: oferta por RA contra população 0–3 permite estimar déficit?**
-Não com 0–3: a PDAD-A 2024 publica **"até 4 anos"**, e a estimativa abaixo usa
-0–4 — **subestima a taxa e superestima o déficit**. Matrículas de
-`relatorio_matriculas_2024.csv` (`MAT_CRECHE`), população de `pdad_a_2024_*.pdf`
-(tabela 2 de cada RA).
 
-DF: 40.851 matrículas em creche para 170.243 crianças de 0–4 anos = 24,0%
-aparente. O numerador não é caixa-preta: `MAT_CRECHE` vem com `IDADE` na mesma
-linha. Das 40.851 matrículas de 2024, **26.076 são de crianças de 0–3 anos** e
-**14.775 (36,2%) de 4 anos ou mais** — 14.505 com exatamente 4 anos. Mais de um
-terço da matrícula é de criança que já deveria estar na pré-escola: distorção
-idade-etapa, não excesso de demanda por creche.
+Agora com 0–3 dos dois lados. A PDAD-A 2024 entra pelos microdados
+(`base_de_morador.pdf`, que é ZIP com `moradores.csv`; ver SCHEMA.md), não pela
+tabela "até 4 anos" dos PDFs: `10_ingest_pdad.py` lê idade simples e peso
+amostral. O DF tem **139.116 crianças de 0–3 anos** (4,7% dos 2.982.816
+moradores; IC do total ±5,1 mil) e **81.546 de 4–5 anos**.
 
-Por RA (`data/interim/q5_creche.csv`): SCIA 4,1%, Sol Nascente/Pôr do Sol 4,7%,
-Paranoá 11,2%; no outro extremo Plano Piloto 60,7%, Park Way 86,8% e Lago Sul
-97,5%; Arniqueira, Arapoanga e SIA com 0 matrículas.
+Duas convenções de idade, e a comparação depende delas: a PDAD dá **idade na
+entrevista**, e o corte de 31/03/2024 — o critério de matrícula — só é calculável
+para 49,6% das linhas, que cobrem 55,2% da população de 0–3, então **não serve de
+denominador**; o Censo dá **idade no ano** (`IDADE`). Quem comparar os dois lados
+tem de dizer qual convenção está em cada um (detalhe em `SCHEMA.md`, blocos da
+PDAD e de `relatorio_matriculas_*`).
 
-O déficit está concentrado; o denominador é que não é estimável. A taxa usa 0–4
-dos dois lados; o numerador de 0–3 (26.076) sobre o mesmo divisor daria 15,3%,
-que exigiria a população 0–3 (§5).
+**Quantas frequentam.** 27,1% das crianças de 0–3 (±2,5 p.p.), ou ~37.654
+crianças; dessas, 57,8% na rede pública (na percepção da família) e 42,1% na
+particular. A estrutura é a mesma que o Censo mostra em 2024: 57,3% da matrícula
+em creche está na rede **conveniada**, 42,3% na privada não conveniada e 0,3% em
+unidades da própria SEEDF — a família que responde "pública" está, quase sempre,
+falando da conveniada. Aos 4–5 anos, 86,0% frequentam (±2,5 p.p.): cerca de 11,4
+mil crianças em idade de pré-escola obrigatória estão fora da escola.
+
+**O que falta para a meta.** A meta usual de cobertura de creche é 50% da faixa:
+69.558 crianças, contra 37.654 frequentando — faltam **~31,9 mil (±3,5 mil)**. O
+número é do DF inteiro, não de RA: é onde a amostra sustenta o intervalo.
+
+**A taxa por RA de escola não mede atendimento.** Por escola
+(`data/interim/q5_creche.csv`), SCIA 4,1%, Sol Nascente/Pôr do Sol 4,7% e Paranoá
+11,2%, contra Plano Piloto 60,7%, Park Way 86,8% e Lago Sul 97,5%. Mas 74,7% dos
+alunos de 6–17 anos estudam na própria RA e 24,6% em outra, e na creche o
+fenômeno reaparece: em **Arniqueira 44,7% das crianças de 0–3 frequentam creche
+(PDAD) e o cadastro não registra nenhuma matrícula nem unidade** — as crianças
+atravessam a fronteira da RA. Por isso o déficit por RA só pode ser calculado do
+lado da demanda (RA de moradia, PDAD), e ali o n por RA vai de 14 a 184 pessoas:
+meio-intervalo de 6 a 36 p.p. Serve para agrupar RAs (SCIA, Fercal, Área Rural,
+Recanto das Emas e São Sebastião embaixo; Sobradinho, Águas Claras, Sudoeste e
+Núcleo Bandeirante em cima), não para mapa por RA.
+
+**Correção de método: os 36,2% não são distorção idade-etapa.** A versão anterior
+dizia que 14.775 das 40.851 matrículas em creche (36,2%) eram de criança de "4
+anos ou mais", lidas como criança que já deveria estar na pré-escola. `IDADE` no
+Censo é **idade no ano**, não idade em 31/03, que é a data de corte da matrícula.
+A prova está no próprio arquivo: no 1º ano do fundamental, 70,8% dos alunos
+aparecem com `IDADE` 7 e 25,0% com 6 — exatamente o que o corte de 31/03 produz
+sobre idade por ano de nascimento. Uma criança com `IDADE` 4 pode estar
+legitimamente em creche (nascida depois de 31/03), e só 270 matrículas de creche
+têm `IDADE` ≥ 5, que nenhuma convenção explica. A distorção real fica entre 0,7%
+e ~10% (o limite superior supõe que todo nascimento se distribui uniformemente no
+ano) — não 36,2%. Nenhuma conta deste relatório usa `IDADE` como idade em 31/03;
+a distorção idade-série do §2.4 vem da TDI da INEP, que aplica o corte.
+
+**O que não fecha, e por quê.** O Censo conta 26.076 matrículas em creche de
+criança com `IDADE` ≤ 3; a PDAD implica ~37.654 frequentando. A diferença de
+~11,6 mil não é explicada por nenhuma das duas fontes sozinha. Hipóteses, nenhuma
+testada: creches que não declaram o Censo Escolar (assistenciais, não escolares),
+autodeclaração da família e a diferença de data de referência. Quem resolve é o
+microdado do Censo Escolar por escola, que não está ingerido (§5). Até então, o
+projeto publica as duas contagens lado a lado e não escolhe uma.
 
 **2.6 Qualidade: mudanças de esquema, códigos, duplicatas, anos parciais**
 
@@ -259,7 +327,7 @@ que exigiria a população 0–3 (§5).
 | Hipótese | Veredito | Evidência |
 |---|---|---|
 | O IDEB médio do DF esconde duas cidades | **premissa falsa, efeito real** — "o DF está entre os melhores do país" só vale para a linha "Total" dos anos iniciais (8º de 27, 6,4 contra 6,3 do Brasil), e só porque a privada entra na conta (4ª do país, 26,9% da matrícula de fundamental). Na rede pública o DF é 13º de 27 em anos iniciais (6,0 contra 6,1 do Brasil), 16º em anos finais (4,7 contra 5,0) e **último de 27 no ensino médio regular (3,6 contra 4,3)**. A desigualdade entre RAs é grande (38,5–42,5% da variância), mas 58–62% fica dentro da RA e o corte centro/periferia não separa | `divulgacao_regioes_ufs_ideb_2025.zip` + `divulgacao_brasil_ideb_2025.zip` → `q8_df_brasil_uf.csv`; `divulgacao_*_escolas_2025.zip` → `q8_escolas_rede.csv`; `ideb_ef_ai_2005_2025.csv` 2023/2025; `relatorio_matriculas_2024.csv`; `q11_distorcao_df.csv` |
-| Déficit de creche concentrado em RAs específicas | **sustenta** a concentração (0% a 97,5% de atendimento aparente; Ceilândia, Sol Nascente, São Sebastião e Samambaia somam ~13 mil matrículas de déficit a 50%), **mas o valor não é estimável** em 0–3: a PDAD-A só tem 0–4 | `relatorio_matriculas_2024.csv`; `pdad_a_2024_*.pdf` |
+| Déficit de creche concentrado em RAs específicas | **sustenta** a concentração e agora **tem valor**: 139.116 crianças de 0–3, 27,1% frequentando (±2,5 p.p.), déficit de ~31,9 mil (±3,5 mil) para a meta de 50% — no DF, não por RA. A concentração territorial segue visível (SCIA 10,6%, Fercal 12,7% contra Sobradinho 45,2%, Águas Claras 46,0%), mas o n por RA é de 14 a 184 pessoas: agrupa RAs, não desenha mapa | `10_ingest_pdad.py` → `pdad_frequencia.parquet`; `relatorio_matriculas_2024.csv` |
 
 O que não se sustenta: tratar a média do DF como retrato da cidade e o DF como
 referência nacional — a reputação vem de uma média que mistura redes e olha só os
@@ -286,10 +354,18 @@ a variável não é contínua no território.
   e Brasil existe (§2.4); falta a distribuição entre escolas privadas. **Correção:**
   a versão anterior esperava que os arquivos por escola trouxessem a rede privada;
   eles trouxeram a confirmação da série da SEEDF e nenhum dado privado.
-- **População de 0–3 anos por RA.** A PDAD-A 2024 para em "até 4 anos". A API do
-  IBGE (Censo 2022, tabela 9514) chega ao DF como um município só; idade por RA
-  exigiria os agregados por setor censitário e uma chave setor → RA. Sem esse
-  denominador não existe taxa em 0–3, só o limite de §2.5.
+- **População de 0–3 anos por RA — resolvida, com resíduo de precisão.** Não
+  falta o dado: faltava abrir três arquivos que o 05 tinha baixado como "PDF".
+  Os microdados da PDAD-A 2024 dão 139.116 crianças de 0–3 no DF (4,7% da
+  população) e frequência a creche por RA; o total expandido reproduz as tabelas
+  publicadas com desvio máximo de 0,01% por RA (§2.5). O que continua fora é a
+  **precisão por RA**: 14 a 184 pessoas por RA, meio-intervalo de 6 a 36 p.p. Por
+  isso nenhuma taxa por RA entra como número, só como agrupamento. Para reduzir a
+  variância seria preciso o agregado por setor censitário (Censo 2022) com chave
+  setor → RA, ou a própria PDAD-A com estrato e unidade primária, que o arquivo
+  não publica. E a idade em 31/03/2024 só existe para 49,6% das linhas (55,2% da
+  população de 0–3); por isso o projeto usa a idade na entrevista e declara a
+  convenção, em vez de fingir o corte.
 - **Fechamento de escola e infraestrutura de 2016.** 277 códigos somem da série
   sem motivo declarado, e o arquivo de 2016 é cópia de 2017 (§2.6). Um contato
   institucional destravaria os dois; nenhum dado aberto substitui isso.

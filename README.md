@@ -60,7 +60,7 @@ consolidados — mas é desenhado para o Brasil.
 | [INEP — IDEB](https://www.gov.br/inep/pt-br/areas-de-atuacao/pesquisas-estatisticas-e-indicadores/ideb/resultados/2005-2025) | IDEB por escola e por UF, por dependência administrativa. | download manual pelo navegador, `07`–`08` |
 | [INEP — Taxas de Rendimento](https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos) | Aprovação, reprovação e abandono por escola, todas as redes. | download manual pelo navegador, `07`–`08` |
 | [INEP — Indicadores por escola](https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos) | Distorção idade-série e taxa de não-resposta por escola, todas as redes. | download manual pelo navegador, `07`–`08` |
-| [PDAD / IPEDF](https://pdad.ipe.df.gov.br/) | Perfil demográfico e socioeconômico por Região Administrativa. | API de relatórios, `05` |
+| [PDAD / IPEDF](https://pdad.ipe.df.gov.br/) | Perfil demográfico e socioeconômico por Região Administrativa, inclusive os **microdados** de moradores e domicílios (peso amostral, idade, frequência escolar, RA de estudo). | API de relatórios, `05`; microdados, `10` |
 | [IDE/DF — Geoserviços](https://www.geoservicos.ide.df.gov.br/) | Malha das Regiões Administrativas (serviço ArcGIS, 37 RAs). | download automático, `09` |
 
 O `download.inep.gov.br` responde ao navegador, mas não ao `urllib`/`curl` deste
@@ -71,14 +71,16 @@ escondido: nenhum script finge que baixou o que não baixou.
 ## Estado
 
 **Fase 0 — reconhecimento.** A sessão de 2026-10-22 fechou o inventário e
-respondeu às seis perguntas da fase, mas a etapa não está completa: faltam o Ideb
-por escola das escolas privadas (que a INEP não publica depois de 2017) e a
-população de 0–3 anos por RA — as duas nomeadas em `REPORT.md` §5. Ainda não há
-produto: há inventário, dicionário de dados e as respostas que os dados já
-permitem. Fontes baixadas e verificadas: 80 arquivos da SEEDF, 53 relatórios da
-PDAD-A, 10 arquivos da INEP e a malha das RAs, todos com sha256 no manifesto. O
-escopo, os números e os vereditos estão em [`REPORT.md`](REPORT.md); os campos de
-cada arquivo, em [`SCHEMA.md`](SCHEMA.md); o que foi feito em cada etapa, em
+respondeu às seis perguntas da fase; a sessão de 2026-10-23 abriu os microdados
+da PDAD-A 2024 e corrigiu duas contas de método (creche e biblioteca). A etapa
+não está completa: falta o Ideb por escola das escolas privadas, que a INEP não
+publica depois de 2017 (`REPORT.md` §5). Ainda não há produto: há inventário,
+dicionário de dados e as respostas que os dados já permitem. Fontes baixadas e
+verificadas: 80 arquivos da SEEDF, 53 arquivos da PDAD-A (50 relatórios, dois
+microdados e o dicionário), 10 arquivos da INEP e a malha das RAs, todos com
+sha256 no manifesto. O escopo, os números e os vereditos estão em
+[`REPORT.md`](REPORT.md); os campos de cada arquivo, em
+[`SCHEMA.md`](SCHEMA.md); o que foi feito em cada etapa, em
 [`docs/worklogs/`](docs/worklogs/).
 
 O que o reconhecimento já mostrou:
@@ -94,9 +96,10 @@ O que o reconhecimento já mostrou:
 - **A desigualdade territorial existe, mas não é a manchete.** 38,5% da variância
   do IDEB de anos iniciais de 2025 está entre Regiões Administrativas — o resto
   está dentro da mesma RA. (`ideb_ef_ai_2005_2025.csv`)
-- **Mais de um terço da matrícula em creche é de criança de 4 anos ou mais**
-  (36,2%), quando essa criança já deveria estar na pré-escola.
-  (`relatorio_matriculas_2024.csv`)
+- **27% das crianças de 0 a 3 anos frequentam creche; a meta é 50%.** São 139.116
+  crianças na faixa e ~37.654 na creche — faltam ~31,9 mil. Quase toda a creche
+  pública é conveniada: a rede própria da SEEDF tem 0,3% da matrícula, e 57,3%
+  está na rede conveniada. (`pdad_frequencia.parquet`, `relatorio_matriculas_2024.csv`)
 - **A distorção idade-série separa as redes.** Em 2025, a mediana na rede
   estadual é 9,0% nos anos iniciais, 17,1% nos finais e 20,7% no médio; na
   privada, 1,2%, 3,2% e 4,5% — nos finais e no médio, o p10 da estadual fica
@@ -127,7 +130,8 @@ O que o reconhecimento já mostrou:
     ├── 06_analysis.py         # as seis perguntas, com número e arquivo
     ├── 07_ingest_inep.py      # ingere o que veio pelo navegador
     ├── 08_profile_inep.py     # perfila e normaliza o que a INEP entrega
-    └── 09_download_malha.py   # malha das RAs (IDE/DF), só validação por atributo
+    ├── 09_download_malha.py   # malha das RAs (IDE/DF), só validação por atributo
+    └── 10_ingest_pdad.py      # microdados da PDAD-A: agregados por RA
 ```
 
 ## Como rodar
@@ -144,6 +148,10 @@ uv pip install -r requirements.txt
 .venv/bin/python scripts/04_crosswalk.py         # taxa de casamento das chaves
 .venv/bin/python scripts/05_external_sources.py  # PDAD-A e teste das demais fontes
 .venv/bin/python scripts/06_analysis.py          # números do REPORT.md
+
+# microdados da PDAD-A (população 0–3, frequência por RA, fluxo RA → RA)
+.venv/bin/python scripts/10_ingest_pdad.py --check  # só lê e descreve
+.venv/bin/python scripts/10_ingest_pdad.py          # agregados em data/interim/pdad/
 ```
 
 Depois da parte da SEEDF, a INEP:

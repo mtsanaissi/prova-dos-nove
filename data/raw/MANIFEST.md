@@ -152,6 +152,23 @@ anterior.
 | `2026-10-22_TDI_2025_ESCOLAS.zip` | INEP/Distorção idade-série | https://download.inep.gov.br/informacoes_estatisticas/indicadores_educacionais/2025/TDI_2025_ESCOLAS.zip | 2026-10-22 | 34465795 | `352b1ce726bb33f56a0141e91e547919ef786b391c30708a21060f8a4af9a858` | download manual pelo navegador; distorção idade-série por escola em todas as redes |
 | `2026-10-22_tnr_escolas_2025.zip` | INEP/Taxa de não-resposta | https://download.inep.gov.br/informacoes_estatisticas/indicadores_educacionais/2025/tnr_escolas_2025.zip | 2026-10-22 | 30600051 | `35d6a8c9ad0994b04deae8d1547e3fcc54a261f206ffa334ba51f622d3bb6405` | download manual pelo navegador; percentual de alunos sem informação de rendimento/movimento por escola, todas as redes; não separa não participação de resultado suprimido (ver SCHEMA.md e q12) |
 
+## Correções
+
+Registro de metadados errados neste manifesto. O conteúdo do arquivo não muda:
+`sha256` e bytes continuam valendo; o que se corrige é o que o manifesto diz
+sobre ele.
+
+- **2026-10-23 — extensão de três arquivos da PDAD-A 2024.** As linhas de
+  `2026-10-22_pdad_a_2024_base_de_morador.pdf`,
+  `..._base_de_domicilios.pdf` e `..._dicionario_de_dados.pdf` têm extensão
+  `.pdf` porque `05_external_sources.py` nomeava todo relatório da PDAD assim.
+  Os dois primeiros são **ZIP** (contêm `moradores.csv`, 69.542 linhas, e
+  `domicilios.csv`, 24.845 linhas); o terceiro é **XLSX** (dicionário de
+  variáveis e anexos de códigos). Os bytes registrados são 4.523.063, 1.427.844
+  e 473.417; os `sha256` não mudaram. O conteúdo é detectado pelos primeiros
+  bytes em `10_ingest_pdad.py`; o `05` passou a derivar a extensão do sufixo da
+  URL, e os nomes antigos continuam aceitos para não gerar download duplicado.
+
 ## Regras
 
 - `sha256` sempre, para detectar republicação silenciosa pela fonte.

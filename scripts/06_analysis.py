@@ -1,11 +1,12 @@
 """Respostas às seis perguntas da fase 0, ao Ideb nacional (q7–q10) e ao Ideb
 ausente (q11–q12).
 
-Entrada: parquets de `data/interim/seedf/`, `data/interim/pdad_populacao.csv` e
-         `data/interim/inep/`.
+Entrada: parquets de `data/interim/seedf/`, `data/interim/pdad_populacao.csv`,
+         `data/interim/pdad/` (agregados da PDAD-A) e `data/interim/inep/`.
 Saída:   `data/interim/q1_unidades.csv` ... `q8_conferencia_seedf.csv`,
-         `q9_em_integrado.csv`, `q10_fluxo_df.csv`, `q11_distorcao_df.csv` e
-         `q12_*.csv`, e um log com os números que vão para o REPORT.md.
+         `q9_em_integrado.csv`, `q10_fluxo_df.csv`, `q11_distorcao_df.csv`,
+         `q12_*.csv`, os três `q3_biblioteca*.csv` e um log com os números que
+         vão para o REPORT.md.
 Idempotente: sim — leitura e reescrita das saídas.
 
 Regra de leitura: nulo é ausente, `0` é zero. Nunca se soma nulo como zero.
@@ -13,12 +14,9 @@ Regra de leitura: nulo é ausente, `0` é zero. Nunca se soma nulo como zero.
 
 from __future__ import annotations
 
-import re
-import unicodedata
-
 import pandas as pd
 
-from _common import INTERIM
+from _common import INTERIM, norm_ra
 
 S = INTERIM / "seedf"
 NOME_REDE = {
@@ -36,18 +34,6 @@ def carrega(prefixo: str, ano: str | None = None) -> pd.DataFrame:
     if not arquivos:
         raise FileNotFoundError(f"sem parquet para {padrao}")
     return pd.concat([pd.read_parquet(a) for a in arquivos], ignore_index=True)
-
-
-def norm_ra(txt: str) -> str:
-    t = unicodedata.normalize("NFKD", str(txt)).encode("ascii", "ignore").decode().upper()
-    t = re.sub(r"\s+", " ", t).strip()
-    trocas = {
-        "SOL NASCENTE E POR DO SOL": "SOL NASCENTE / POR DO SOL",
-        "SUDOESTE/OCTOGONAL": "SUDOESTE / OCTOGONAL",
-        "SCIA/ESTRUTURAL": "SCIA",
-        "AGUAS CLARAS": "AGUAS CLARAS",
-    }
-    return trocas.get(t, t)
 
 
 def num(serie: pd.Series) -> pd.Series:
@@ -117,6 +103,30 @@ def q2() -> None:
 
 
 # ---------------------------------------------------------------- Q3
+def escolas_com_ef_em(ano: str) -> dict[str, bool]:
+    """Códigos das escolas que ofertam fundamental ou médio no cadastro do ano.
+
+    2014–2024 informam turmas por etapa (`ESC_*`), inclusive multietapa; 2025
+    informa sinalizadores 0/1 (`FUND_AI`, `FUND_AF`, `MED`). A multietapa
+    (`ESC_MULTI`, `ESC_EF_MULTI`) conta como oferta de fundamental: a escola tem
+    turma de EF, mesmo que em classe multisseriada.
+    """
+    arquivos = [
+        a for a in sorted(S.glob(f"escolas__*{ano}*.parquet"))
+        if "dicionario" not in a.name
+    ]
+    if not arquivos:
+        raise FileNotFoundError(f"sem cadastro de escolas para {ano}")
+    d = pd.read_parquet(arquivos[0])
+    if "FUND_AI" in d:
+        colunas = ["FUND_AI", "FUND_AF", "MED"]
+    else:
+        colunas = ["ESC_EF_INI", "ESC_EF_FIN", "ESC_EM_TOTAL", "ESC_MULTI", "ESC_EF_MULTI"]
+    colunas = [c for c in colunas if c in d]
+    oferta = pd.concat([num(d[c]) for c in colunas], axis=1).fillna(0).sum(axis=1)
+    return dict(zip(d["CO_ENTIDADE"].astype(str), oferta > 0))
+
+
 def q3() -> None:
     bruto = pd.read_parquet(S / "infraestrutura__relatorio_infraestrutura_2025.parquet").copy()
     # só escolas em funcionamento: o arquivo traz 1471 registros, incluindo
@@ -126,15 +136,20 @@ def q3() -> None:
     i["ra"] = i["NO_RA"].map(norm_ra)
     print(f"   infraestrutura 2025: {len(bruto)} registros, {len(i)} em funcionamento")
     itens = {
-        "biblioteca": "IN_BIBLIOTECA",
         "laboratório de informática": "IN_LABORATORIO_INFORMATICA",
-        "internet": "IN_INTERNET",
+        "internet (existência)": "IN_INTERNET",
+        "internet para os alunos": "IN_INTERNET_ALUNOS",
         "quadra de esportes": "IN_QUADRA_ESPORTES",
         "acessibilidade (nenhum item)": "IN_ACESSIBILIDADE_INEXISTENTE",
         "banheiro": "IN_BANHEIRO",
         "água potável": "IN_AGUA_POTAVEL",
         "esgoto inexistente": "IN_ESGOTO_INEXISTENTE",
     }
+    # o mesmo item em dois universos: todas as escolas em funcionamento e só as
+    # que ofertam fundamental ou médio (onde laboratório, quadra e biblioteca são
+    # exigência). Sem a segunda coluna, o número mistura públicos diferentes.
+    oferta = escolas_com_ef_em("2025")
+    i["efem"] = i["CO_ENTIDADE"].astype(str).map(oferta).fillna(False)
     linhas = []
     for rotulo, col in itens.items():
         if col not in i:
@@ -143,6 +158,8 @@ def q3() -> None:
         # colunas *_INEXISTENTE marcam a ausência com 1, não com 0
         negativo = col.endswith("_INEXISTENTE")
         sem = (v == 1) if negativo else (v == 0)
+        v_efem = num(i.loc[i["efem"], col])
+        sem_efem = (v_efem == 1) if negativo else (v_efem == 0)
         linhas.append(
             {
                 "item": rotulo,
@@ -150,18 +167,23 @@ def q3() -> None:
                 "sem_item": int(sem.sum()),
                 "nao_reportado": int(v.isna().sum()),
                 "pct_sem_item": round(100 * sem.sum() / v.notna().sum(), 1),
+                "escolas_efem": int(v_efem.notna().sum()),
+                "pct_sem_item_efem": round(100 * sem_efem.sum() / v_efem.notna().sum(), 1) if v_efem.notna().any() else None,
             }
         )
     tab = pd.DataFrame(linhas)
+    tab["universo_efem"] = "escolas em funcionamento que ofertam fundamental ou médio (n=927)"
     tab.to_csv(INTERIM / "q3_infra_itens.csv", index=False)
     print("\n== Q3 infraestrutura 2025 (infraestrutura__relatorio_infraestrutura_2025)")
+    print("   duas colunas de universo: todas as 1.332 em funcionamento e as 927 que")
+    print("   ofertam fundamental ou médio. Biblioteca fica em q3_biblioteca.csv, com")
+    print("   os três itens separados (biblioteca, sala de leitura, união).")
     print(tab.to_string(index=False))
 
     por_rede = i.groupby("rede").apply(
         lambda d: pd.Series(
             {
                 "n": len(d),
-                "sem_biblioteca_pct": round(100 * (num(d["IN_BIBLIOTECA"]) == 0).sum() / num(d["IN_BIBLIOTECA"]).notna().sum(), 1),
                 "sem_lab_info_pct": round(100 * (num(d["IN_LABORATORIO_INFORMATICA"]) == 0).sum() / num(d["IN_LABORATORIO_INFORMATICA"]).notna().sum(), 1),
                 "sem_internet_pct": round(100 * (num(d["IN_INTERNET"]) == 0).sum() / num(d["IN_INTERNET"]).notna().sum(), 1),
                 "sem_quadra_pct": round(100 * (num(d["IN_QUADRA_ESPORTES"]) == 0).sum() / num(d["IN_QUADRA_ESPORTES"]).notna().sum(), 1),
@@ -170,26 +192,106 @@ def q3() -> None:
         include_groups=False,
     )
     por_rede.to_csv(INTERIM / "q3_infra_por_rede.csv")
-    print("\npor rede:")
+    print("\npor rede (mesmo universo):")
     print(por_rede.to_string())
 
     por_ra = i.groupby("ra").apply(
         lambda d: pd.Series(
             {
                 "escolas": len(d),
-                "sem_biblioteca_pct": round(100 * (num(d["IN_BIBLIOTECA"]) == 0).sum() / max(1, num(d["IN_BIBLIOTECA"]).notna().sum()), 1),
                 "sem_lab_info_pct": round(100 * (num(d["IN_LABORATORIO_INFORMATICA"]) == 0).sum() / max(1, num(d["IN_LABORATORIO_INFORMATICA"]).notna().sum()), 1),
                 "sem_quadra_pct": round(100 * (num(d["IN_QUADRA_ESPORTES"]) == 0).sum() / max(1, num(d["IN_QUADRA_ESPORTES"]).notna().sum()), 1),
                 "sem_internet_pct": round(100 * (num(d["IN_INTERNET"]) == 0).sum() / max(1, num(d["IN_INTERNET"]).notna().sum()), 1),
             }
         ),
         include_groups=False,
-    ).sort_values("sem_biblioteca_pct", ascending=False)
+    ).sort_values("sem_lab_info_pct", ascending=False)
     por_ra.to_csv(INTERIM / "q3_infra_por_ra.csv")
-    print("\npor RA (pior → melhor em falta de biblioteca):")
-    print(por_ra.head(12).to_string())
-    print("\nRA com menos falta de biblioteca:")
-    print(por_ra.tail(5).to_string())
+    print("\npor RA (pior → melhor em falta de laboratório de informática):")
+    print(por_ra.head(8).to_string())
+
+    biblioteca(i)
+
+
+def biblioteca(i: pd.DataFrame) -> None:
+    """Biblioteca, sala de leitura e bibliotecário — três coisas distintas.
+
+    O Censo tem três itens separados (dicionário da infraestrutura, campos 123,
+    124 e 144): `IN_BIBLIOTECA` é a biblioteca; `IN_SALA_LEITURA` é a sala de
+    leitura; `IN_BIBLIOTECA_SALA_LEITURA` é "biblioteca e/ou sala de leitura" e
+    é exatamente o OR dos outros dois. Sala de leitura não é biblioteca, então
+    as duas nunca entram na mesma frase como se fossem a mesma coisa.
+
+    O universo é o das escolas que ofertam fundamental ou médio: biblioteca não
+    é exigência para creche, e usar todas as 1.332 unidades mistura públicos
+    que a norma trata de forma diferente.
+    """
+    oferta = escolas_com_ef_em("2025")
+    i = i.copy()
+    i["efem"] = i["CO_ENTIDADE"].astype(str).map(oferta).fillna(False)
+    for col in ["IN_BIBLIOTECA", "IN_SALA_LEITURA", "IN_BIBLIOTECA_SALA_LEITURA", "QT_PROF_BIBLIOTECARIO"]:
+        i[col] = num(i[col])
+    i["tem_biblioteca"] = i["IN_BIBLIOTECA"] == 1
+    i["tem_espaco"] = i["IN_BIBLIOTECA_SALA_LEITURA"] == 1
+    i["tem_bibliotecario"] = i["QT_PROF_BIBLIOTECARIO"].fillna(0) >= 1
+
+    def medidas(d: pd.DataFrame) -> pd.Series:
+        com_bib = d[d["tem_biblioteca"]]
+        return pd.Series(
+            {
+                "n": len(d),
+                "sem_biblioteca_pct": round(100 * (d["IN_BIBLIOTECA"] == 0).sum() / d["IN_BIBLIOTECA"].notna().sum(), 1) if d["IN_BIBLIOTECA"].notna().any() else None,
+                "sem_biblioteca_nem_sala_leitura_pct": round(100 * (~d["tem_espaco"]).sum() / len(d), 1) if len(d) else None,
+                "com_bibliotecario_pct": round(100 * d["tem_bibliotecario"].sum() / len(d), 1) if len(d) else None,
+                "biblioteca_sem_bibliotecario_pct": round(100 * (~com_bib["tem_bibliotecario"]).sum() / len(com_bib), 1) if len(com_bib) else None,
+            }
+        )
+
+    efem = i[i["efem"]].copy()
+    por_rede = efem.groupby("rede").apply(medidas, include_groups=False)
+    por_rede.loc["todas (EF/EM)"] = medidas(efem)
+    # linha do universo completo (inclui quem só oferta educação infantil): é dela
+    # que sai o 66,3% histórico, e ela existe para que o número antigo continue
+    # rastreável ao lado do correto — não para ser citada como "escolas sem
+    # biblioteca" sem dizer o universo
+    por_rede.loc["todas as escolas em funcionamento (inclui EI)"] = medidas(i)
+    por_rede.to_csv(INTERIM / "q3_biblioteca.csv")
+    print("\n== Q3 biblioteca — universo: escolas em funcionamento que ofertam fundamental ou médio")
+    print("   três medidas nomeadas; 'sem biblioteca nem sala de leitura' não é 'sem biblioteca'")
+    print(por_rede.to_string())
+
+    por_ra = efem.groupby("ra").apply(medidas, include_groups=False).sort_values("sem_biblioteca_pct", ascending=False)
+    por_ra.to_csv(INTERIM / "q3_biblioteca_por_ra.csv")
+    print("\npor RA (pior → melhor em falta de biblioteca; n pequeno = ordenação instável):")
+    print(por_ra.head(8).to_string())
+
+    # série 2014–2025 no mesmo universo (EF/EM do cadastro de cada ano)
+    serie = []
+    for ano in [str(a) for a in range(2014, 2026)]:
+        arquivos = sorted(S.glob(f"infraestrutura__relatorio_infraestrutura_{ano}.parquet"))
+        if not arquivos:
+            continue
+        d = pd.read_parquet(arquivos[0])
+        if "TP_SITUACAO_FUNCIONAMENTO" in d:
+            d = d[d["TP_SITUACAO_FUNCIONAMENTO"] == "1"]
+        oferta_ano = escolas_com_ef_em(ano)
+        d = d.copy()
+        d["efem"] = d["CO_ENTIDADE"].astype(str).map(oferta_ano).fillna(False)
+        d = d[d["efem"]]
+        b = num(d["IN_BIBLIOTECA"])
+        u = num(d["IN_BIBLIOTECA_SALA_LEITURA"])
+        serie.append(
+            {
+                "ano": ano,
+                "escolas_efem": len(d),
+                "sem_biblioteca_pct": round(100 * (b == 0).sum() / b.notna().sum(), 1) if b.notna().any() else None,
+                "sem_biblioteca_nem_sala_leitura_pct": round(100 * (u == 0).sum() / u.notna().sum(), 1) if u.notna().any() else None,
+            }
+        )
+    serie_df = pd.DataFrame(serie)
+    serie_df.to_csv(INTERIM / "q3_biblioteca_serie.csv", index=False)
+    print("\nsérie 2014–2025, universo EF/EM de cada ano (2016 é cópia de 2017 — ver SCHEMA):")
+    print(serie_df.to_string(index=False))
 
 
 # ---------------------------------------------------------------- Q4
@@ -306,29 +408,51 @@ def q5() -> None:
     pop = pop.dropna(subset=["pop_0_4"])
     pop = pop.groupby("ra")["pop_0_4"].sum().rename("pop_0_4_2024")
 
-    tab = pd.concat([oferta, mat03, mat4, unidades, pop], axis=1).fillna(0)
+    # denominador em 0–3: vem dos microdados da PDAD-A (10_ingest_pdad.py), que
+    # permitem idade simples; a faixa "até 4 anos" dos PDFs não permitia.
+    freq_pdad = INTERIM / "pdad" / "pdad_frequencia.parquet"
+    if freq_pdad.exists():
+        f = pd.read_parquet(freq_pdad)
+        c = f[(f["faixa"] == "0-3") & (f["ra"] != "DF")]
+        pop03 = c.set_index("ra")["pop_est"].rename("pop_0_3_2024")
+        freq03 = c.set_index("ra")["freq_pct"].rename("freq_pdad_0_3_pct")
+    else:
+        print("   (sem data/interim/pdad/pdad_frequencia.parquet: rode 10_ingest_pdad.py)")
+        pop03 = pd.Series(dtype=float, name="pop_0_3_2024")
+        freq03 = pd.Series(dtype=float, name="freq_pdad_0_3_pct")
+
+    tab = pd.concat([oferta, mat03, mat4, unidades, pop, pop03, freq03], axis=1).fillna(0)
     denom = tab["pop_0_4_2024"].where(tab["pop_0_4_2024"] > 0)
     tab["taxa_atendimento_pct"] = (100 * tab["matriculas_creche_2024"] / denom).round(1)
+    # a taxa em 0–3 usa numerador e denominador na mesma faixa (com a ressalva de
+    # que a matrícula usa idade no Censo e a PDAD usa idade na entrevista)
+    denom03 = tab["pop_0_3_2024"].where(tab["pop_0_3_2024"] > 0)
+    tab["taxa_atendimento_0_3_pct"] = (100 * tab["matriculas_creche_0_3"] / denom03).round(1)
     # estimativa: meta de 50% das crianças (referência usual de cobertura de creche)
     tab["faltam_para_50pct"] = (0.5 * tab["pop_0_4_2024"] - tab["matriculas_creche_2024"]).round(0)
-    tab = tab.sort_values("taxa_atendimento_pct")
+    tab["faltam_para_50pct_0_3"] = (0.5 * tab["pop_0_3_2024"] - tab["matriculas_creche_0_3"]).round(0)
+    tab = tab.sort_values("taxa_atendimento_0_3_pct")
     tab.index.name = "ra"
     tab.to_csv(INTERIM / "q5_creche.csv")
-    print("\n== Q5 creche: matrículas 2024 (matriculas_2024) × população 0–4 (PDAD-A 2024)")
+    print("\n== Q5 creche: matrículas 2024 × população (PDAD-A 2024)")
+    print("   taxa_atendimento_pct usa 0–4 nos dois lados (limite inferior do atendimento);")
+    print("   taxa_atendimento_0_3_pct usa 0–3 nos dois lados; freq_pdad_0_3_pct é a")
+    print("   frequência autodeclarada da PDAD, que não é a mesma coisa que matrícula no Censo.")
     print(tab.to_string())
     print(
-        f"\ntotal DF: {tab['matriculas_creche_2024'].sum():.0f} matrículas em creche, "
-        f"{tab['pop_0_4_2024'].sum():.0f} crianças de 0–4 anos, "
-        f"taxa aparente {100*tab['matriculas_creche_2024'].sum()/tab['pop_0_4_2024'].sum():.1f}%"
+        f"\ntotal DF: {tab['matriculas_creche_2024'].sum():.0f} matrículas em creche; "
+        f"{tab['pop_0_4_2024'].sum():.0f} crianças de 0–4 (PDF) e {tab['pop_0_3_2024'].sum():.0f} de 0–3 (microdado); "
+        f"taxa 0–4 {100*tab['matriculas_creche_2024'].sum()/tab['pop_0_4_2024'].sum():.1f}%, "
+        f"taxa 0–3 {100*tab['matriculas_creche_0_3'].sum()/tab['pop_0_3_2024'].sum():.1f}%"
     )
     print(
         f"dessas matrículas, {tab['matriculas_creche_0_3'].sum():.0f} são de crianças de 0–3 anos e "
-        f"{tab['matriculas_creche_4_mais'].sum():.0f} de 4 anos ou mais "
-        f"({100*tab['matriculas_creche_4_mais'].sum()/tab['matriculas_creche_2024'].sum():.1f}% da creche)"
+        f"{tab['matriculas_creche_4_mais'].sum():.0f} de 4 anos ou mais no ano do Censo"
     )
     print(
-        "atenção: o denominador é 0–4 anos; a faixa 0–3 não existe na PDAD-A. "
-        "A taxa é, portanto, subestimada e o déficit é um limite superior."
+        "atenção: IDADE é idade no ano do Censo e o corte de matrícula é 31/03; criança de "
+        "'4 anos' pode estar em idade de creche. Ver a correção em REPORT.md §2.5 — o valor "
+        "de 4 anos ou mais NÃO mede distorção idade-etapa."
     )
 
 

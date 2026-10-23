@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 import urllib.request
 from pathlib import Path
 
@@ -19,6 +20,33 @@ INTERIM = ROOT / "data" / "interim"
 MANIFEST = RAW / "MANIFEST.md"
 CKAN = "https://data.se.df.gov.br/api/3/action"
 DOWNLOAD_DATE = "2026-10-22"
+
+
+# Nomes de Região Administrativa: cada fonte escreve de um jeito. A chave é a
+# forma já normalizada (maiúscula, sem acento, espaço simples) e o valor é a
+# forma canônica do projeto, a mesma do cadastro da SEEDF.
+TROCAS_RA = {
+    "SOL NASCENTE E POR DO SOL": "SOL NASCENTE / POR DO SOL",
+    "SUDOESTE E OCTOGONAL": "SUDOESTE / OCTOGONAL",
+    "SUDOESTE/OCTOGONAL": "SUDOESTE / OCTOGONAL",
+    "SCIA/ESTRUTURAL": "SCIA",
+    "AREA RURAL DO DF": "AREA RURAL",
+    "DF AREA RURAL": "AREA RURAL",
+    "DISTRITO FEDERAL (AREA RURAL)": "AREA RURAL",
+}
+
+
+def norm_ra(texto: str) -> str:
+    """Normaliza nome de RA para a forma canônica usada nos cruzamentos.
+
+    Maiúscula, sem acento, espaço simples, sem numeral romano de prefixo
+    (`I - PLANO PILOTO` → `PLANO PILOTO`). As diferenças de grafia entre SEEDF,
+    PDAD-A e GDF são resolvidas por `TROCAS_RA`; a tabela está em SCHEMA.md.
+    """
+    t = unicodedata.normalize("NFKD", str(texto)).encode("ascii", "ignore").decode().upper()
+    t = re.sub(r"^[IVXL]+\s*-\s*", "", t.strip())
+    t = re.sub(r"\s+", " ", t).strip()
+    return TROCAS_RA.get(t, t)
 
 
 def get_json(url: str) -> dict:

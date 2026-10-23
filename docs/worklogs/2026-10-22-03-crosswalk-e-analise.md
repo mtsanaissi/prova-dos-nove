@@ -1,5 +1,12 @@
 # 2026-10-22 — 03. Crosswalk e análise
 
+> **Nota posterior (2026-10-23).** Duas conclusões deste registro foram
+> corrigidas depois: o "36,2% da matrícula de creche é de 4 anos ou mais" é
+> artefato da convenção de `IDADE` (idade no ano, não em 31/03) e a taxa de
+> biblioteca foi medida com o item errado e no universo errado. Ver
+> [`2026-10-23-01-pdad-e-biblioteca.md`](2026-10-23-01-pdad-e-biblioteca.md) e
+> `REPORT.md` §2.3 e §2.5.
+
 Objetivo: responder às seis perguntas da fase 0 com número e arquivo, e medir as
 chaves antes de qualquer join. Scripts: `04_crosswalk.py`, `06_analysis.py`.
 

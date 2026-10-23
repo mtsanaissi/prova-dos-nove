@@ -121,8 +121,16 @@ suppression, and schools with and without Ideb share the same distribution
 (`q12_tnr_ideb_ausente.csv`). TDI and TNR cover the same 925 DF schools, all
 matched to the 2025 census (100%), including 336 private ones.
 
-Open: no 0–3 age band in PDAD-A (creche rate uses 0–4 and is a bound); no
-population by RA from Censo 2022 ingested (IBGE API only reaches the DF as one
-municipality; RA-level age tables would need the census sector mesh). Analyses
-still use `CO_RA` as an attribute and produce no map, so geo libraries stay out of
-`requirements.txt` for now.
+Open: the 0–3 population is resolved from the PDAD-A microdata (139.116 children in
+the DF; 27,1% in creche, ±2,5 p.p.). What remains is per-RA precision (14–184 people
+per RA, 6–36 p.p. half-width): only census-tract aggregates with a tract → RA key, or
+a PDAD-A release carrying strata and primary sampling units, would settle it. Until
+then per-RA figures enter as clusters, never as a rate per RA. The birth date
+(`E02_1`) is filled for 49,6% of rows, so the 31/03 convention cannot replace the
+interview age. Two method errors were corrected on 2026-10-23: the "36,2% of creche
+enrolment is 4+" reading (age in the census year is not age on 31/03) and the library
+figure (three distinct INEP items — biblioteca, sala de leitura and the union of both
+— over a universe restricted to schools offering fundamental/médio). No population by
+RA from Censo 2022 ingested (IBGE API only reaches the DF as one municipality).
+Analyses still use `CO_RA` as an attribute and produce no map, so geo libraries stay
+out of `requirements.txt` for now.

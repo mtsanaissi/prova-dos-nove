@@ -76,10 +76,19 @@ o outro.
 `MAT_EM_*`, `NU_IDADE`. `0` é zero real; nulo não aparece nesses campos.
 
 **Leitura por idade:** `IDADE` acompanha a linha, então a matrícula em creche se
-abre por idade simples. Em 2024: 26.076 matrículas em creche de crianças de 0–3
-anos e 14.775 de 4 anos ou mais (36,2% do total de 40.851). Isso separa "quantas
-crianças em idade de creche estão na creche" de "quantas estão em creche fora da
-idade de creche" — a segunda conta não é demanda por creche.
+abre por idade simples. Em 2024: 40.851 matrículas em creche, das quais 26.076
+com `IDADE` ≤ 3 e 14.775 com `IDADE` ≥ 4 (36,2%).
+
+**`IDADE` não é idade em 31/03.** O dicionário do campo diz "idade calculada pelo
+ano de nascimento": é a idade no ano do Censo, não a idade na data de corte da
+matrícula (31/03). A prova está no próprio arquivo — no 1º ano do fundamental,
+70,8% dos alunos aparecem com `IDADE` 7 e 25,0% com 6, exatamente o que o corte
+de 31/03 produz sobre idade-por-ano-de-nascimento. Consequência: uma criança com
+`IDADE` 4 pode estar legitimamente em creche (nascida depois de 31/03), e a
+diferença entre "idade 4" e "4 anos em 31/03" **não é distorção idade-etapa**.
+Nenhuma conta de distorção deste projeto usa `IDADE`; a distorção vem da TDI da
+INEP, que aplica o corte. Para creche, o numerador é `MAT_CRECHE` (etapa) e o
+denominador é a população de 0–3 do microdado da PDAD-A (ver bloco da PDAD).
 
 ### `relatorio_infraestrutura_*.csv` (família `infraestrutura`)
 
@@ -99,6 +108,25 @@ idade de creche" — a segunda conta não é demanda por creche.
 `IN_INTERNET`, `IN_QUADRA_ESPORTES`, `IN_ACESSIBILIDADE_*`, `IN_BANHEIRO`,
 `IN_ESGOTO_*`, `IN_AGUA_*`. São 0/1: `1` = existe. **Exceção:** colunas com
 sufixo `_INEXISTENTE` marcam a ausência com `1`.
+
+**Biblioteca e sala de leitura são três itens, não um.** O dicionário da própria
+SEEDF (`dicionario_de_dados_infraestrutura.csv`, campos 123, 124 e 144) define:
+`IN_BIBLIOTECA` = "Dependências físicas existentes e utilizadas na escola -
+Biblioteca"; `IN_SALA_LEITURA` = "... - Sala de Leitura";
+`IN_BIBLIOTECA_SALA_LEITURA` = "... - Biblioteca e/ou Sala de leitura". O
+terceiro é **exatamente o OR dos outros dois** — conferido nos 12 anos. Sala de
+leitura **não é** biblioteca, e nenhuma frase do projeto pode tratá-las como a
+mesma coisa. Além disso, o universo importa: biblioteca não é exigência para
+creche, então as medidas do projeto são calculadas só entre as escolas que
+ofertam fundamental ou médio (927 em 2025), nunca sobre as 1.332 unidades em
+funcionamento. Três medidas nomeadas saem em `q3_biblioteca.csv`,
+`q3_biblioteca_por_ra.csv` e `q3_biblioteca_serie.csv`:
+`sem_biblioteca_pct` (`IN_BIBLIOTECA = 0`),
+`sem_biblioteca_nem_sala_leitura_pct` (`IN_BIBLIOTECA_SALA_LEITURA = 0`) e
+`biblioteca_sem_bibliotecario_pct` (`QT_PROF_BIBLIOTECARIO = 0` entre as que têm
+biblioteca). Em 2025, entre as escolas de EF/EM: 60,6% sem biblioteca, 6,0% sem
+biblioteca nem sala de leitura, 48,2% das que têm biblioteca não têm
+bibliotecário; na rede estadual, 73,4%, 6,4% e 61,4%.
 
 ### `relatorio_situacao_aluno_excel_*.csv` (família `situacao`)
 
@@ -199,8 +227,29 @@ sufixo `_INEXISTENTE` marcam a ausência com `1`.
 | Fonte | IPEDF — PDAD-A 2024 (`https://pdad.ipe.df.gov.br/`) |
 | Granularidade | Região Administrativa (relatório por RA) |
 | Dado extraído | população por faixa etária e sexo, tabela 2 de cada relatório |
-| Faixa disponível | **`até 4 anos`** — não existe faixa 0–3 |
-| Observações | 53 PDFs, medidos: 35 RAs do DF, 12 municípios goianos da área de influência e 6 documentos que não são RA (total do DF, DF rural, dicionário de dados, base de domicílios, base de morador, questionário). Só as 35 RAs entram na análise. População é **estimativa amostral**, não contagem censitária. O Censo 2022 via API do IBGE chega ao DF como um município único (`5300108`); população por idade e RA exigiria os agregados por setor censitário e uma chave setor → RA, que não foram ingeridos |
+| Faixa disponível | **`até 4 anos`** — o PDF não abre 0–3; o microdado abre (bloco seguinte) |
+| Observações | 53 PDFs, medidos: 35 RAs do DF, 12 municípios goianos da área de influência e 6 documentos que não são RA (total do DF, DF rural, dicionário de dados, base de domicílios, base de morador, questionário). Só as 35 RAs entram em `pdad_populacao.csv`. População é **estimativa amostral**, não contagem censitária. **Três desses "PDFs" são os microdados** (dois ZIP e um XLSX, com extensão errada) e são lidos por `10_ingest_pdad.py` — ver o bloco abaixo |
+
+### `pdad_a_2024_base_de_morador.pdf`, `..._base_de_domicilios.pdf`, `..._dicionario_de_dados.pdf` (IPEDF — microdados)
+
+| Campo | Valor |
+|---|---|
+| Fonte | IPEDF — PDAD-A 2024, os mesmos arquivos que o 05 baixou como "relatório"; a extensão está errada (ver `MANIFEST.md` → Correções) |
+| Formato real | `..._base_de_morador.pdf` = **ZIP** com `moradores.csv` (69.542 × 134); `..._base_de_domicilios.pdf` = **ZIP** com `domicilios.csv` (24.845 × 128); `..._dicionario_de_dados.pdf` = **XLSX** (abas `moradores`, `domicilios` e `anexo_1`…`anexo_11` com os domínios de código) |
+| Granularidade | uma linha por **morador** (não é escola, não é RA) — e é por isso que nada individual sai do script |
+| Chave | `morador_id` (morador) e `A01nficha` (domicílio) — **descartadas** na leitura |
+| Pesos | `peso_mor` (morador) e `peso_dom` (domicílio). Soma de `peso_mor`: 4.255.724 nas 48 localidades, 2.982.816 no DF |
+| Geografia | `localidade` = RA do DF (5301–5335), Área Rural (5336) ou município goiano (5241–5252); `setor_distrito` é mais fino e **é descartado** |
+| Idade | `idade_calculada` (na entrevista, completa) e `E02_1` (data de nascimento, preenchida em **49,6%** das linhas). A idade em 31/03/2024 — o critério de matrícula — só existe para essa subamostra, que cobre 55,2% da população de 0–3: **não serve de denominador**; o denominador do projeto é a idade na entrevista, com a convenção declarada |
+| Campos usados | `idade_calculada`, `H02` (frequenta creche/escola), `H04_1` (pública/particular), `H04_4` (RA/município da escola), `E05` (cor/raça), `peso_mor` |
+| Sentinela | `88888` = não sabe, `99999` = não se aplica. Nunca entram em soma, média ou contagem; em categoria, viram rótulo explícito. `renda_domiciliar_pc_r` é 99999 em **78,7%** dos domicílios (cobertura válida de 6,7% a 33,9% por RA) e **não é usada** |
+| H04_4 | `0` = na própria RA; `40` = no próprio município; `1`–`36` = RA (`5300 + código`); `41`–`52` = município goiano (`5200 + código`). O respondente às vezes informa o código do próprio município em vez de `40`: o leitor compara com `localidade % 100` e conta como próprio. Sem essa regra, "estuda em outra RA" sai inflado em ~30 p.p. |
+| Saídas (`data/interim/pdad/`) | `pdad_populacao.parquet` (RA × idade simples 0–17, × faixa, e × faixa em 31/03; `escopo` separa as três convenções), `pdad_frequencia.parquet` (RA × faixa × frequência × rede; a linha `ra = "DF"` é o agregado e não se soma às RAs), `pdad_fluxo_escolar.parquet` (RA de moradia × destino × rede, 6–17 anos), `pdad_entorno.parquet` (município goiano × destino), `pdad_conferencia.csv` (microdado × tabela do PDF, por RA) e `pdad_metodo.csv` (as checagens) |
+| Variância | aproximada: Kish para proporções, com reposição para totais. O arquivo **não traz estrato nem unidade primária**, então o intervalo publicado é um limite inferior de largura |
+| Validação | total expandido por RA × `pop_total` dos PDFs: desvio máximo **0,01%** em 35 RAs; total do DF 2.982.816 contra 2.982.816 do documento do DF (0,00%). `10_ingest_pdad.py` interrompe acima de 5% por RA ou 1% no total |
+| Idempotência | reescreve os parquets a partir do raw; duas execuções geram bytes idênticos; não acessa a rede |
+| Achados que o arquivo já entrega | DF com 139.116 crianças de 0–3 (4,7% da população); 27,1% frequentam creche (IC ±2,5 p.p.), 57,8% na rede pública — a mesma proporção que o Censo 2024 dá para a rede conveniada (57,3% da matrícula em creche); 4–5 anos: 86,0% frequentam; 6–10 e 11–14: 97,5% e 97,6%; 15–17: 90,6%. Fluxo: 74,7% dos alunos de 6–17 anos estudam na própria RA, 24,6% em outra. Entorno: 19.523 moradores de 6–17 anos dos 12 municípios goianos estudam no DF (Novo Gama 26,8%, Planaltina de Goiás 22,9%, Padre Bernardo 21,4%) |
+| Limite | o n por RA e por faixa é pequeno (0–3: 14 a 184 pessoas); o meio-intervalo por RA vai a 6–36 p.p. — serve para agrupar RAs, não para mapa fino |
 
 ### `2026-10-22_regioes_administrativas_df.geojson` (GDF/IDE, fora da SEEDF)
 
@@ -382,14 +431,23 @@ estadual e uma conveniada.
 ### Nomes de Região Administrativa
 
 36 valores no cadastro de 2025 para 35 RAs (a PDAD-A e o GDF usam 35). Fontes
-escrevem diferente e é preciso normalizar:
+escrevem diferente e é preciso normalizar. A regra única está em
+`_common.norm_ra` (maiúscula, sem acento, espaço simples, sem numeral romano de
+prefixo, e a tabela `TROCAS_RA`): os scripts 05, 06 e 10 usam a mesma função, e
+nenhum cruzamento por nome de RA passa por outra regra.
 
 | Cadastro SEEDF | PDAD-A 2024 | Normalizado |
 |---|---|---|
 | `SOL NASCENTE / POR DO SOL` | `SOL NASCENTE E PÔR DO SOL` | `SOL NASCENTE / POR DO SOL` |
-| `SUDOESTE / OCTOGONAL` | `SUDOESTE/OCTOGONAL` | `SUDOESTE / OCTOGONAL` |
-| `SCIA` | `SCIA/ESTRUTURAL` | `SCIA` |
+| `SUDOESTE / OCTOGONAL` | `SUDOESTE/OCTOGONAL`, `Sudoeste e Octogonal` | `SUDOESTE / OCTOGONAL` |
+| `SCIA` | `SCIA/ESTRUTURAL`, `SCIA` | `SCIA` |
 | `AGUAS CLARAS ` (com espaço) | `XX - ÁGUAS CLARAS` | `AGUAS CLARAS` |
+| — (não existe no cadastro) | `Área Rural`, `Distrito Federal (Área rural)` | `AREA RURAL` |
+
+`AREA RURAL` é a única localidade da PDAD sem par no cadastro da SEEDF: 121.759
+moradores e 7.115 crianças de 0–3, sem escola estadual cadastrada com essa RA.
+Ela aparece nas tabelas de população e frequência e fica **fora** dos
+cruzamentos com matrícula por escola — declarada, não preenchida com zero.
 
 ## Mudanças de esquema entre anos
 

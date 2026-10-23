@@ -1,5 +1,10 @@
 # 2026-10-22 — 01. Inventário e coleta
 
+> **Nota posterior (2026-10-23).** A frase "a faixa etária mais fina é `até 4
+> anos`" vale para os **PDFs**; entre os 53 arquivos baixados estão dois ZIP com
+> os microdados de moradores e domicílios, que abrem idade simples. Ver
+> [`2026-10-23-01-pdad-e-biblioteca.md`](2026-10-23-01-pdad-e-biblioteca.md).
+
 Objetivo: descobrir o que a SEEDF publica, baixar sem duplicar, e registrar
 procedência. Entrada de rede, saída de bytes. Nenhuma análise aqui.
 

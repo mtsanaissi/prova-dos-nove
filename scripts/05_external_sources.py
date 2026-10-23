@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from pathlib import Path
 
 import pandas as pd
 
@@ -24,6 +25,24 @@ from _common import DOWNLOAD_DATE, INTERIM, RAW, append_manifest, download, sha2
 PDAD = "https://pdad.ipe.df.gov.br"
 DEST = RAW / "pdad"
 STATUS = INTERIM / "fontes_externas_status.csv"
+
+SUFIXOS_ACEITOS = {".pdf", ".zip", ".xlsx", ".csv", ".ods"}
+
+
+def sufixo_da_url(url: str, padrao: str = ".pdf") -> str:
+    """Extensão real do arquivo, lida da URL.
+
+    A PDAD serve PDFs por RA, mas também os microdados em `.zip` e o dicionário
+    em `.xlsx`. Fixar `.pdf` no nome local já custou três arquivos com extensão
+    errada (corrigido em 2026-10-23, ver `MANIFEST.md` → Correções).
+    """
+    sufixo = Path(url.split("?")[0]).suffix.lower()
+    return sufixo if sufixo in SUFIXOS_ACEITOS else padrao
+
+
+def eh_pdf(caminho: Path) -> bool:
+    """Confere pelos bytes: extensão não decide o formato."""
+    return caminho.open("rb").read(4) == b"%PDF"
 
 
 def norm(texto: str) -> str:
@@ -71,7 +90,14 @@ def main() -> None:
 
     linhas, registros = [], []
     for nome, url in sorted(relatorios.items()):
-        arquivo = DEST / f"{DOWNLOAD_DATE}_pdad_a_2024_{re.sub(r'[^a-z0-9]+', '_', norm(nome).lower()).strip('_')}.pdf"
+        base = f"{DOWNLOAD_DATE}_pdad_a_2024_{re.sub(r'[^a-z0-9]+', '_', norm(nome).lower()).strip('_')}"
+        arquivo = DEST / f"{base}{sufixo_da_url(url)}"
+        legado = DEST / f"{base}.pdf"
+        # arquivo já baixado em 2026-10-22 com extensão errada: reaproveita em vez
+        # de baixar de novo (raw é imutável; o nome errado está em MANIFEST.md →
+        # Correções)
+        if not arquivo.exists() and legado.exists():
+            arquivo = legado
         caminho, nbytes = download(url, arquivo)
         registros.append(
             {
@@ -84,11 +110,15 @@ def main() -> None:
                 "notas": f"relatório por RA: {nome}",
             }
         )
-        try:
-            vals = ler_pdf(caminho)
-        except Exception as exc:  # noqa: BLE001
+        if eh_pdf(caminho):
+            try:
+                vals = ler_pdf(caminho)
+            except Exception as exc:  # noqa: BLE001
+                vals = {"pop_0_4": None, "pop_total": None}
+                print(f"  falhou leitura {nome}: {exc}")
+        else:
             vals = {"pop_0_4": None, "pop_total": None}
-            print(f"  falhou leitura {nome}: {exc}")
+            print(f"  {caminho.name}: não é PDF (microdados/dicionário) — lido em 10_ingest_pdad.py")
         linhas.append({"ra_pdad": nome, "ra": norm(nome), **vals})
         print(f"  {nome[:40]:42} 0-4 anos: {vals['pop_0_4']}")
 
