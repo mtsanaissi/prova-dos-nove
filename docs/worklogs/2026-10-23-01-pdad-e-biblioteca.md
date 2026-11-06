@@ -113,3 +113,8 @@ O `10` é offline, lê só `data/raw/pdad/` e reescreve `data/interim/pdad/`. O 
 passou a ler `pdad_frequencia.parquet` para o denominador de 0–3 em `q5_creche.csv`
 e a emitir `q3_biblioteca.csv`, `q3_biblioteca_por_ra.csv` e
 `q3_biblioteca_serie.csv`.
+
+> **Nota posterior (2026-10-23).** O item "Censo × PDAD na creche não fecham" de
+> §6 foi fechado em 2026-10-23-02: 37.595 contra 37.654, 0,16%, convenção de
+> idade (L-49); a hipótese de creche não declarada (C-02) foi superada. Ver
+> `docs/LIMITES.md`.

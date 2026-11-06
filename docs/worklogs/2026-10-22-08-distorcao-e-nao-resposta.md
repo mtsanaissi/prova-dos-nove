@@ -125,3 +125,8 @@ Saídas: `q12_tnr_ideb_ausente.csv` e `q12_tnr_nao_aplicavel.csv`.
 
 `08` lê os dois xlsx em streaming (`openpyxl` `read_only`) e leva ~80 s no total,
 incluindo os seis arquivos anteriores.
+
+> **Nota posterior (2026-10-23).** O Censo 2025 por escola foi ingerido na sessão
+> 2026-10-23-02; a ponderação e a cobertura estão em L-02, L-21 e L-22. A
+> hipótese da TNR (C-06) segue derrubada; o limite da fonte é L-09. Ver
+> `docs/LIMITES.md`.

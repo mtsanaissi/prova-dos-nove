@@ -78,3 +78,7 @@ explicar por que a linha "Total" do DF é alta.
 
 `08` passou a levar ~65 s por causa do xlsx de 37,7 MB; o leitor é streaming e
 não carrega a planilha inteira.
+
+> **Nota posterior (2026-10-23).** O Censo 2025 por escola foi ingerido na sessão
+> 2026-10-23-02; a ponderação e a cobertura estão em L-02, L-21 e L-22. Ver
+> `docs/LIMITES.md`.

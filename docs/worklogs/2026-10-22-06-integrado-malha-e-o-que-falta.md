@@ -87,3 +87,7 @@ continuam fora de `requirements.txt`.
 
 `09` é o único script que baixa a malha; rodar de novo não rebaixa (o arquivo
 existe) e reescreve a validação.
+
+> **Nota posterior (2026-10-23).** A população de 0–3 por RA foi resolvida pelos
+> microdados da PDAD-A (L-52), com resíduo de precisão (L-17); a taxa de creche
+> não usa mais denominador 0–4. Ver `docs/LIMITES.md`.

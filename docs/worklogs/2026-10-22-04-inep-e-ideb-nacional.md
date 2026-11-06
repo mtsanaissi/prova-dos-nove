@@ -156,3 +156,8 @@ a que mistura redes e só olha os anos iniciais.
 - Join escola a escola com `CO_ENTIDADE` só depois de medir a taxa de casamento,
   como todos os outros. A INEP nem sempre usa esse nome (`CO_ESCOLA` aparece em
   indicadores por escola).
+
+> **Nota posterior (2026-10-23).** Os arquivos pendentes em §7 (linha Brasil e
+> os três zips por escola) foram ingeridos nas sessões 05 e 06; a ausência de
+> Ideb privado por escola segue aberta (L-08) e os marcadores de nota são
+> históricos (L-35). Ver `docs/LIMITES.md`.

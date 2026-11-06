@@ -120,3 +120,8 @@ de nome/código com SEEDF e PDAD). Até então, análise não-espacial.
   `tnr_escolas_2025.zip`.
 - Malha das RAs, para qualquer mapa futuro.
 - Censo 2022 (IBGE) com idade simples por RA: resolveria o denominador 0–3.
+
+> **Nota posterior (2026-10-23).** Os itens da INEP e a malha listados em §8
+> foram ingeridos em 2026-10-22 e 2026-10-23; o denominador 0–3 do DF foi
+> resolvido pelos microdados da PDAD-A (L-52), e o Censo 2022 por RA segue fora
+> (L-47). Ver `docs/LIMITES.md`.

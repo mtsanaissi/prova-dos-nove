@@ -130,3 +130,7 @@ contínua no território. Ficou descrito em `REPORT.md` §4, não desenhado.
 - Fluxo escolar da rede privada: só a estadual é publicada.
 - Fechamento de escola: 277 códigos sem motivo.
 - Renomear `icc` → `f_entre_ra` em `q4_ideb_resumo.csv` (é um F, não um ICC).
+
+> **Nota posterior (2026-10-23).** Os dois números corrigidos neste registro
+> estão no registro: L-50 (36,2%) e L-51 (biblioteca), fechados em
+> 2026-10-23-01; a coluna `icc` é L-41. Ver `docs/LIMITES.md`.

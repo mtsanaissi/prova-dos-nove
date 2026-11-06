@@ -125,3 +125,7 @@ do Ideb 2025 entre as escolas que ofertam a etapa em 2025 = 85,2% (AI estadual),
 `07` é o único passo com intervenção humana (download pelo navegador). `08`
 roda em ~42 s e reescreve os três parquets da INEP a partir dos zips; `06` é
 offline e reescreve todos os `q*.csv`, inclusive os de `q8`.
+
+> **Nota posterior (2026-10-23).** O médio com o integrado à EPT foi ingerido na
+> sessão 06 (L-34); a mediana por escola de 2023 e 2025 não é da mesma coorte
+> (L-33). Ver `docs/LIMITES.md`.
