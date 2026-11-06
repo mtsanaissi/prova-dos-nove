@@ -113,6 +113,34 @@ Consequência para o código de build: `ausente` **não** é deduzido de `NaN` n
 parquet do Ideb sem checar `estado`; e `nao_aplicavel` **não** pode ser lido como
 "não oferta EF/EM" — a oferta vem do vetor do bloco 2, não do indicador.
 
+### 3.1 O texto de cada ausência
+
+A frase é fixa por caso — não é redigida escola por escola. Cada uma termina com
+o id que a sustenta, e todas são explicadas uma vez em `site/como-ler.html`
+(decisão do mantenedor, 2026-11-06).
+
+| situação | onde aparece | texto na página | id |
+|---|---|---|---|
+| etapa não ofertada | blocos 4–7, quando a etapa não está no vetor de oferta | `— esta etapa não é ofertada pela escola em 2025` | L-59 |
+| Ideb ausente, rede privada | bloco 4, escola privada sem valor no ano | `sem Ideb: a INEP não publica resultado de escola privada depois de 2017` | L-08 |
+| Ideb ausente, rede pública | bloco 4, escola pública sem valor no ano | `sem Ideb em 2025: a INEP não publica quando há menos de 10 alunos na prova ou participação abaixo de 80%, e não informa qual foi o caso` | L-09, L-30 |
+| matrícula não declarada | bloco 3, Censo de 2024 com a célula vazia | `matrícula não declarada no Censo de 2024` | L-28 |
+| nenhum indicador | página sem Ideb e sem taxas | `esta escola não tem Ideb nem taxas publicadas em 2025` | L-09 |
+| n abaixo do limiar | blocos 5, 6 e 7 quando n < 30 | `16 alunos nesta etapa — o indicador não é publicado quando a turma é pequena` (o número é o n da escola) | D4, L-40 |
+
+Regras:
+
+- Nenhuma frase nomeia causa que a fonte não distingue (L-09): não se escreve
+  "não participou" nem "participou pouco".
+- O ano da frase do Ideb é o ano do bloco; a frase da rede privada vale para
+  qualquer ano.
+- O símbolo (`-` ou `—`) vem antes do texto, que entra em corpo menor (§3).
+- `site/como-ler.html` reúne, uma vez: os quatro estados e o que cada símbolo
+  significa; a regra dos 10 alunos e 80% (L-30); por que a rede privada não tem
+  Ideb (L-08); por que a TNR não explica a ausência (L-09); o limiar de n = 30
+  (D4) e a aproximação do denominador (L-21). É linkada de cada frase de
+  ausência; `creditos.html` continua sendo só licença e titular.
+
 ## 4. Perfis-piloto
 
 Sete perfis escolhidos por **condição em coluna**, nunca por nome, com desempate
@@ -169,6 +197,7 @@ site/
 ├── indice.json                    # [{co_entidade, nome, ra, rede}] — alimenta a busca
 ├── estilo.css                     # sem framework
 ├── creditos.html                  # licença por fonte e titular (critério 6)
+├── como-ler.html                  # estados, ausências e limiar de n, explicados uma vez
 ├── <CO_ENTIDADE>.html             # uma página por escola (1.291)
 └── dados/<CO_ENTIDADE>.json       # procedência de cada número daquela página
 ```
@@ -337,7 +366,8 @@ python scripts/12_build_site.py --public data/public --out site \
 ```
 
 **4. Estados.** `ausente` sai `-`, `nao_aplicavel` sai `—`, `zero` sai `0`; os
-três não se confundem em nenhuma página dos perfis.
+três não se confundem em nenhuma página dos perfis, e as seis frases do §3.1
+aparecem como estão, sem variação de redação por escola.
 
 ```bash
 python scripts/12_build_site.py --public data/public --out site \
