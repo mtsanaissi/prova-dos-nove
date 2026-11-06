@@ -41,7 +41,7 @@ inteira, n = 1.
 | 1 | identificação | cadastro SEEDF, `escolas__relatorio_escolas_2025.parquet` (`NO_ENTIDADE`, `Nome RA`, `Nome Rede`) | 2025 | cópia do campo | 1.291 | L-36, L-37 |
 | 2 | oferta por etapa | mesmo cadastro, vetor `INF_CRE`…`PROF` (8 sinalizadores) | 2025 | flag 1 = oferta; **não** traduzir "é EI" | 1.291 | L-57, L-36 |
 | 3 | matrícula por etapa | Censo INEP, `censo_escola_df.parquet` (`QT_MAT_INF_CRE`, `QT_MAT_FUND_AI`, `QT_MAT_FUND_AF`, `QT_MAT_MED`) | 2024–2025 | soma da etapa por escola, como está no campo | 1.360 linhas em 2024 (76 com célula vazia) e 1.291 em 2025 | L-28, L-43, L-48, L-62 |
-| 4 | Ideb por etapa | `ideb_escolas_df.parquet`, `indicador ∈ {ideb_observado, ideb_projetado}` | 2005–2025, de dois em dois anos | valor observado e meta em séries separadas; privada só até 2017 | 499 escolas com valor em 2025 | L-08, L-12, L-30, L-33, L-56 |
+| 4 | Ideb por etapa | `ideb_escolas_df.parquet`, `indicador = ideb_observado` | 2005–2025, de dois em dois anos | valor observado; **a meta (`ideb_projetado`) não é publicada**; privada só até 2017 | 499 escolas com valor em 2025 | L-08, L-12, L-30, L-33, L-56 |
 | 5 | fluxo | `tx_rend_escolas_df.parquet`, `categoria ∈ {aprovacao, reprovacao, abandono}` | 2025 | percentual da etapa, como publicado | 1.355 unidades escola × etapa | L-11, L-59, L-21, D4 |
 | 6 | distorção idade-série | `tdi_escolas_df.parquet` | 2025 | percentual da etapa | 1.355 unidades | L-11, L-59, L-40, D4 |
 | 7 | não-resposta | `tnr_escolas_df.parquet` | 2025 | percentual da etapa | 1.355 unidades | L-09, L-11, L-59 |
@@ -143,7 +143,7 @@ o build lê. Quatro arquivos, nenhum com microdado, nenhum com linha de aluno:
 | arquivo | grão | colunas | tamanho medido |
 |---|---|---|---|
 | `escolas.parquet` | escola (1.291) | `co_entidade`, `nome`, `ra`, `rede`, `oferta_inf_cre`…`oferta_prof` (8 flags), `mat_inf_cre_2024`, `mat_fund_ai_2024`, `mat_fund_af_2024`, `mat_med_2024` e as quatro de 2025 | 240 KB |
-| `indicadores.parquet` | escola × etapa × indicador × ano | `co_entidade`, `etapa` (`AI`/`AF`/`EM`), `indicador` (`ideb_observado`, `ideb_projetado`, `tdi`, `tnr`, `aprovacao`, `reprovacao`, `abandono`), `ano`, `valor`, `estado` | 900 KB |
+| `indicadores.parquet` | escola × etapa × indicador × ano | `co_entidade`, `etapa` (`AI`/`AF`/`EM`), `indicador` (`ideb_observado`, `tdi`, `tnr`, `aprovacao`, `reprovacao`, `abandono`), `ano`, `valor`, `estado` | 800 KB |
 | `infraestrutura.parquet` | escola × item (8 itens do §2) | `co_entidade`, `item` (nome da coluna `IN_*`), `ano` (2025), `valor` (0/1), `estado` | 25 KB |
 | `procedencia.json` | um registro por indicador/família | `fonte`, `arquivo`, `anos`, `calculo`, `limites` e o `sha256` dos três parquets acima | 15 KB |
 
@@ -153,6 +153,9 @@ Regras do export, todas verificáveis:
 - Matrícula vem do Censo 2024 e 2025; a série ODbL da SEEDF não entra (L-62).
 - Só entram os recortes de etapa `FUN_AI`, `FUN_AF` e `MED`; `FUN`, `FUN_01`…`09`,
   `MED_01`…`04` e `MED_NS` ficam fora (a página não desce a série).
+- A meta do Ideb (`ideb_projetado`) fica fora do insumo publicado: é meta do
+  ciclo 2007–2021, não previsão, e decisão do mantenedor (2026-11-06) é não
+  publicá-la nesta versão (L-56).
 - Mapa de etapa entre fontes: Ideb `AI`/`AF`/`EM` ↔ recorte `FUN_AI`/`FUN_AF`/`MED`.
 - O export falha se `data/public/` já existir com `sha256` diferente do que vai
   gravar e o `--force` não for passado: mudança no insumo aparece no diff.
