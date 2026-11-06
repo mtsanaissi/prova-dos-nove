@@ -8,10 +8,15 @@ Saída:   `data/interim/q1_unidades.csv` ... `q8_conferencia_seedf.csv`,
          `q9_em_integrado.csv`, `q10_fluxo_df.csv`, `q11_distorcao_df.csv`,
          `q12_*.csv`, `q13_ponderacao_df.csv`, `q14_creche_*.csv`,
          `q15_conferencia_censo.csv`, os três `q3_biblioteca*.csv` e um log com
-         os números que vão para o REPORT.md.
+         os números que vão para o REPORT.md. Também
+         `q16_presenca_escola_etapa.csv` e `q16_faixas_n.csv` (matriz de presença
+         escola × etapa) e `q0_execucao.csv` (executado|pulado por etapa).
 Idempotente: sim — leitura e reescrita das saídas.
 
 Regra de leitura: nulo é ausente, `0` é zero. Nunca se soma nulo como zero.
+
+`main()` executa as etapas em ordem, grava `q0_execucao.csv` e sai com código 1
+se alguma pulou; `--parcial` aceita o resultado incompleto e sai com 0.
 """
 
 from __future__ import annotations
