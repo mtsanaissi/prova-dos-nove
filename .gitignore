@@ -3,6 +3,9 @@ data/raw/*
 !data/raw/MANIFEST.md
 data/interim/
 
+# site gerado pelo build (fase 2); o que vai para o Pages é artefato, não fonte
+site/
+
 # ambiente
 .venv/
 venv/

@@ -46,7 +46,7 @@ inteira, n = 1.
 | 6 | distorção idade-série | `tdi_escolas_df.parquet` | 2025 | percentual da etapa | 1.355 unidades | L-11, L-59, L-40, D4 |
 | 7 | não-resposta | `tnr_escolas_df.parquet` | 2025 | percentual da etapa | 1.355 unidades | L-09, L-11, L-59 |
 | 8 | infraestrutura | `relatorio_infraestrutura_*`, colunas `IN_*` | 2025 | presença do item; universo de 927 escolas de EF/EM | 927 | L-25, L-29, L-38, L-51 |
-| 9 | creche da escola | `matriculas__relatorio_matriculas_2024` (`MAT_CRECHE`) e Censo 2025 (`QT_MAT_INF_CRE`) | 2024–2025 | matrícula em creche por escola | unidades com `INF_CRE = 1` | L-27, L-28, L-50 |
+| 9 | creche da escola | Censo INEP, `censo_escola_df.parquet` (`QT_MAT_INF_CRE`) | 2024–2025 | matrícula em creche da escola, como está no campo | unidades com `INF_CRE = 1` (475 em 2025) | L-27, L-28, L-62 |
 
 Regras que valem para todos os blocos:
 
@@ -105,20 +105,47 @@ nenhum Ideb e nenhuma taxa. A página mostra a oferta e diz o que falta.
 
 ## 5. Arquivos gerados e build
 
+### 5.1 Insumo versionado: `data/public/`
+
+`06_analysis.py --public data/public` exporta, de `data/interim/`, o recorte que
+o build lê. Quatro arquivos, nenhum com microdado, nenhum com linha de aluno:
+
+| arquivo | grão | colunas | tamanho medido |
+|---|---|---|---|
+| `escolas.parquet` | escola (1.291) | `co_entidade`, `nome`, `ra`, `rede`, `oferta_inf_cre`…`oferta_prof` (8 flags), `mat_inf_cre_2024`, `mat_fund_ai_2024`, `mat_fund_af_2024`, `mat_med_2024` e as quatro de 2025 | 240 KB |
+| `indicadores.parquet` | escola × etapa × indicador × ano | `co_entidade`, `etapa` (`AI`/`AF`/`EM`), `indicador` (`ideb_observado`, `ideb_projetado`, `tdi`, `tnr`, `aprovacao`, `reprovacao`, `abandono`), `ano`, `valor`, `estado` | 900 KB |
+| `infraestrutura.parquet` | escola × item | `co_entidade`, `item` (nome da coluna `IN_*`), `ano` (2025), `valor` (0/1), `estado` | 120 KB |
+| `procedencia.json` | um registro por indicador/família | `fonte`, `arquivo`, `anos`, `calculo`, `limites` e o `sha256` dos três parquets acima | 15 KB |
+
+Regras do export, todas verificáveis:
+
+- `estado` é copiado do parquet de origem, nunca deduzido de `NaN` (§3).
+- Matrícula vem do Censo 2024 e 2025; a série ODbL da SEEDF não entra (L-62).
+- Só entram os recortes de etapa `FUN_AI`, `FUN_AF` e `MED`; `FUN`, `FUN_01`…`09`,
+  `MED_01`…`04` e `MED_NS` ficam fora (a página não desce a série).
+- Mapa de etapa entre fontes: Ideb `AI`/`AF`/`EM` ↔ recorte `FUN_AI`/`FUN_AF`/`MED`.
+- O export falha se `data/public/` já existir com `sha256` diferente do que vai
+  gravar e o `--force` não for passado: mudança no insumo aparece no diff.
+- `data/public/` é gerado e **commitado** (exceção declarada em `AGENTS.md`).
+
+### 5.2 Saída: `site/`
+
 ```text
 site/
-├── index.html                     # busca por nome/RA, sem ordenação por indicador
+├── index.html                     # busca por nome ou RA; lista em ordem alfabética
+├── indice.json                    # [{co_entidade, nome, ra, rede}] — alimenta a busca
 ├── estilo.css                     # sem framework
-├── <CO_ENTIDADE>.html             # uma página por escola
+├── creditos.html                  # licença por fonte e titular (critério 6)
+├── <CO_ENTIDADE>.html             # uma página por escola (1.291)
 └── dados/<CO_ENTIDADE>.json       # procedência de cada número daquela página
 ```
 
-Formato do JSON de procedência (uma entrada por número publicado):
+Formato do `dados/<CO_ENTIDADE>.json`:
 
 ```json
 {
   "escola": "53000854",
-  "gerado_em": "2026-11-06T00:00:00",
+  "gerado_em": "2026-11-06",
   "numeros": [
     {
       "bloco": "ideb",
@@ -127,7 +154,7 @@ Formato do JSON de procedência (uma entrada por número publicado):
       "valor": 6.1,
       "estado": "valor",
       "fonte": "INEP — Ideb por escola",
-      "arquivo": "data/interim/inep/ideb_escolas_df.parquet",
+      "arquivo": "data/public/indicadores.parquet",
       "calculo": "valor observado da etapa, como publicado",
       "n": 247,
       "limites": ["L-30", "L-33"]
@@ -136,14 +163,32 @@ Formato do JSON de procedência (uma entrada por número publicado):
 }
 ```
 
-Build (`scripts/12_build_site.py`, fase 2): lê `data/public/`, escreve `site/`,
-não acessa a rede e não lê `data/raw`. Idempotente: mesma entrada, mesma saída
-byte a byte (ordenação fixa de JSON e de páginas; sem carimbo de hora variável —
-`gerado_em` vem da data do build declarada por argumento). Rodar duas vezes
-seguidas e comparar `sha256sum` de `site/**` é o teste de idempotência.
+Onde `n` sai: é a matrícula da etapa de 2025 em `escolas.parquet`; `q16`
+(`data/interim/q16_presenca_escola_etapa.csv`) é o artefato que prova a conta, não
+o insumo do build.
 
-O que vai para `data/public/`: só o agregado por escola × etapa que os blocos
-leem, sem microdado e sem linha que identifique pessoa (regra em `AGENTS.md`).
+### 5.3 Interface do build
+
+```bash
+# local, depois de 06 --public
+python scripts/12_build_site.py \
+  --public data/public --out site --data-build 2026-11-06 --limiar-n 30
+
+# verificação dos critérios do §8 (sai != 0 se algum falhar)
+python scripts/12_build_site.py --public data/public --out site \
+  --data-build 2026-11-06 --check
+```
+
+- Sem dependência nova: só `pandas` e `pyarrow` (já em `requirements.txt`) e
+  HTML montado por f-string. O ambiente de CI instala apenas o `requirements.txt`;
+  `jinja2` não está lá e não entra por causa do build.
+- Determinismo: iteração em ordem fixa (escola por `co_entidade`, indicador por
+  nome, anos crescentes), JSON com `sort_keys=True`, e o único carimbo de tempo é
+  `--data-build`. O build **não** chama `datetime.now()`.
+- Não lê `data/interim/` nem `data/raw/`; falha com mensagem clara se
+  `data/public/` não existir ou se o `sha256` registrado não bater.
+- `--limiar-n` é o único lugar onde mora o 30 de D4; o valor usado vai para o
+  `creditos.html` e para o cabeçalho de cada página.
 
 ## 6. `q16` — a medida que sustenta o contrato
 
@@ -226,16 +271,61 @@ repo. Tamanho: 1.291 páginas + o JSON por escola; o limite de site publicado é
 
 ## 8. Critérios de saída da fase 1
 
-1. **Procedência completa**: em 10 páginas sorteadas (os 7 perfis + 3 aleatórias
-   por hash do código), todo número visível tem entrada correspondente em
-   `dados/<CO_ENTIDADE>.json` com fonte, arquivo, ano, cálculo, n e ids.
-2. **Sem ranking**: nenhuma página ordena escolas por indicador e nenhuma exibe
-   faixa p10–p90 ou mediana da rede (D3).
-3. **n pequeno**: unidade com n < 30 não publica TDI, TNR nem taxa de
-   aprovação; mostra a matrícula e a nota de amostra pequena (D4).
-4. **Estados**: `ausente` sai como `-`, `nao_aplicavel` como `—`, `zero` como
-   `0`; nenhum dos três vira o outro em nenhuma página dos perfis.
-5. **Reprodutibilidade**: `06` sem etapa pulada (`q0_execucao.csv`) e `12`
-   rodando duas vezes com `site/**` idêntico por sha256.
-6. **Licença**: nenhum número publicado depende de fonte ODbL (L-62); a página
-   de créditos cita a licença de cada fonte usada.
+`--check` roda os seis critérios e para no primeiro que falhar. Cada um tem o
+comando manual equivalente, para quando o `--check` discordar de uma pessoa. A
+amostra de 10 páginas é determinística: os 7 perfis do §4 mais as 3 primeiras
+escolas, em ordem de `sha256(co_entidade)`, que não sejam perfis — outra pessoa
+chega às mesmas 10.
+
+**1. Procedência completa.** Todo número visível tem entrada em
+`dados/<CO_ENTIDADE>.json` com `fonte`, `arquivo`, `ano`, `calculo`, `n` e
+`limites` não vazios.
+
+```bash
+python scripts/12_build_site.py --public data/public --out site \
+  --data-build 2026-11-06 --check-procedencia
+```
+
+**2. Sem ranking.** Nenhuma página ordena escolas por indicador, nenhuma exibe
+faixa p10–p90 ou mediana da rede, e `indice.json` está em ordem alfabética.
+
+```bash
+grep -c "p10\|p90\|mediana da rede" site/*.html    # 0 em todas
+python -c "import json; d=json.load(open('site/indice.json')); \
+  assert [x['nome'] for x in d]==sorted(x['nome'] for x in d)"
+```
+
+**3. n pequeno.** Unidade com `n < --limiar-n` não publica TDI, TNR nem taxa de
+aprovação; publica a matrícula e a nota de amostra pequena.
+
+```bash
+python scripts/12_build_site.py --public data/public --out site \
+  --data-build 2026-11-06 --check-limiar          # usa 53001419 (perfil f) e a matriz do q16
+```
+
+**4. Estados.** `ausente` sai `-`, `nao_aplicavel` sai `—`, `zero` sai `0`; os
+três não se confundem em nenhuma página dos perfis.
+
+```bash
+python scripts/12_build_site.py --public data/public --out site \
+  --data-build 2026-11-06 --check-estados
+```
+
+**5. Reprodutibilidade.** `06` sem etapa pulada e o build idempotente.
+
+```bash
+python scripts/06_analysis.py                       # sai 0; q0_execucao.csv sem "pulado"
+python scripts/12_build_site.py --public data/public --out site --data-build 2026-11-06
+find site -type f -exec sha256sum {} + | sort > /tmp/site_a.txt
+python scripts/12_build_site.py --public data/public --out site --data-build 2026-11-06
+find site -type f -exec sha256sum {} + | sort > /tmp/site_b.txt
+diff /tmp/site_a.txt /tmp/site_b.txt                # vazio
+```
+
+**6. Licença.** Nenhum número publicado cita família ODbL como fonte, e
+`creditos.html` traz a licença de cada fonte usada (L-62).
+
+```bash
+python scripts/12_build_site.py --public data/public --out site \
+  --data-build 2026-11-06 --check-licencas
+```
