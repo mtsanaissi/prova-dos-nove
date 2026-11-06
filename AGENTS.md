@@ -23,6 +23,13 @@ numbers and gaps live in `README.md` (§Estado), `REPORT.md` and `docs/worklogs/
 - If data does not exist, say so and name what would exist in its place. If a
   hypothesis fails, report that instead of hunting for a slice that saves it.
 
+## Limites e ressalvas
+
+Toda ressalva nova entra em `docs/LIMITES.md` com id `L-xx`, evidência e status;
+id não se reutiliza e item fechado guarda a data. Todo número publicado em
+`README.md` ou `REPORT.md` cita os ids que o limitam. Hipótese derrubada é
+veredito, não limite.
+
 ## Conventions
 
 - Code is in English: identifiers, filenames, functions, modules. Docs
