@@ -21,6 +21,10 @@ import pandas as pd
 from _common import INTERIM, norm_ra
 
 S = INTERIM / "seedf"
+class Pulado(Exception):
+    """Etapa que nao pode rodar por falta de insumo; o motivo vai para q0_execucao.csv."""
+
+
 NOME_REDE = {
     "REDE PÚBLICA FEDERAL": "pública federal",
     "REDE PÚBLICA ESTADUAL VINCULADA À SEEDF": "pública estadual (SEEDF)",
@@ -324,7 +328,9 @@ def q4() -> None:
         sst = ((sub["valor"] - media) ** 2).sum()
         ssb = sum(len(d) * (d["valor"].mean() - media) ** 2 for _, d in sub.groupby("ra"))
         eta2 = ssb / sst
-        icc = (ssb / (k - 1)) / ((sst - ssb) / (n - k))  # F
+        # razao de quadrados medios (um F), nao um coeficiente de correlacao
+        # intraclasse: o nome antigo (icc) foi corrigido em 2026-11-06 (L-41).
+        f_entre_ra = (ssb / (k - 1)) / ((sst - ssb) / (n - k))
         resumo.append(
             {
                 "ano": ano,
@@ -338,7 +344,7 @@ def q4() -> None:
                 "min": round(sub["valor"].min(), 2),
                 "max": round(sub["valor"].max(), 2),
                 "eta2_entre_ra": round(eta2, 3),
-                "icc": round(icc, 3),
+                "f_entre_ra": round(f_entre_ra, 3),
             }
         )
     por_ra = pd.concat(linhas)
@@ -423,7 +429,20 @@ def q5() -> None:
         pop03 = pd.Series(dtype=float, name="pop_0_3_2024")
         freq03 = pd.Series(dtype=float, name="freq_pdad_0_3_pct")
 
-    tab = pd.concat([oferta, mat03, mat4, unidades, pop, pop03, freq03], axis=1).fillna(0)
+    # Contagem que falta é zero; população e frequência que faltam são ausência.
+    # O fillna(0) na tabela inteira transformava AREA RURAL (sem par no cadastro,
+    # L-20) em "taxa 0,0% e 3.558 faltantes" — número que não existe. A taxa e o
+    # faltante só são calculados onde o denominador existe; onde não existe, a
+    # célula fica vazia.
+    tab = pd.concat([oferta, mat03, mat4, unidades, pop, pop03, freq03], axis=1)
+    contagens = ["matriculas_creche_2024", "matriculas_creche_0_3",
+                 "matriculas_creche_4_mais", "unidades_com_creche_2025"]
+    tab[contagens] = tab[contagens].fillna(0)
+    # RA que não existe na série de matrículas não tem contagem zero: não tem
+    # série. AREA RURAL é o caso (L-20) — marcar 0 ali inventa uma taxa de 0,0%
+    # com denominador real (7.115 crianças de 0–3 na PDAD).
+    ras_na_serie = set(m["ra"].dropna())
+    tab.loc[~tab.index.isin(ras_na_serie), contagens] = float("nan")
     denom = tab["pop_0_4_2024"].where(tab["pop_0_4_2024"] > 0)
     tab["taxa_atendimento_pct"] = (100 * tab["matriculas_creche_2024"] / denom).round(1)
     # a taxa em 0–3 usa numerador e denominador na mesma faixa (com a ressalva de
@@ -510,8 +529,7 @@ def q7() -> None:
     """Posição do DF entre as UFs no Ideb, por etapa e por rede."""
     arq = INTERIM / "inep" / "ideb_uf_tidy.parquet"
     if not arq.exists():
-        print("\n== Q7 não executado: falta data/interim/inep/ideb_uf_tidy.parquet (rode 08)")
-        return
+        raise Pulado("falta data/interim/inep/ideb_uf_tidy.parquet (rode 08)")
     t = pd.read_parquet(arq)
     t = t[(t["indicador"] == "ideb_observado") & t["valor"].notna()]
     ufs = set(t["local"]) - {"Norte", "Nordeste", "Sudeste", "Sul", "Centro-Oeste"}
@@ -1143,12 +1161,11 @@ RECORTE_ETAPA = {"FUN_AI": "anos iniciais", "FUN_AF": "anos finais", "MED": "ens
 CODIGO_ETAPA = {"anos iniciais": "AI", "anos finais": "AF", "ensino médio": "EM"}
 
 
-def _censo() -> pd.DataFrame | None:
-    """Recorte do DF dos microdados do Censo (11_ingest_censo.py), ou None."""
+def _censo() -> pd.DataFrame:
+    """Recorte do DF dos microdados do Censo (11_ingest_censo.py)."""
     arq = INTERIM / "inep" / "censo_escola_df.parquet"
     if not arq.exists():
-        print("   (sem data/interim/inep/censo_escola_df.parquet: rode 11_ingest_censo.py)")
-        return None
+        raise Pulado("falta data/interim/inep/censo_escola_df.parquet (rode 11)")
     c = pd.read_parquet(arq)
     c["CO_ENTIDADE"] = c["CO_ENTIDADE"].astype(str).str.strip()
     return c
@@ -1173,9 +1190,8 @@ def q13() -> None:
     tdi_arq = INTERIM / "inep" / "tdi_escolas_df.parquet"
     tx_arq = INTERIM / "inep" / "tx_rend_escolas_df.parquet"
     ideb_arq = INTERIM / "inep" / "ideb_escolas_df.parquet"
-    if censo is None or not tdi_arq.exists() or not tx_arq.exists() or not ideb_arq.exists():
-        print("\n== Q13 não executado: falta o Censo (rode 11) ou os indicadores (rode 08)")
-        return
+    if not tdi_arq.exists() or not tx_arq.exists() or not ideb_arq.exists():
+        raise Pulado("faltam os indicadores por escola (rode 08)")
 
     c25 = censo[censo["ano"] == 2025].copy()
     taxas = []
@@ -1319,9 +1335,6 @@ def q14() -> None:
     referência da faixa etária.
     """
     censo = _censo()
-    if censo is None:
-        print("\n== Q14 não executado: falta o Censo (rode 11)")
-        return
 
     # (1) oferta: unidades com creche e matrícula, por rede e ano
     oferta = []
@@ -1558,9 +1571,8 @@ def q15() -> None:
     """
     censo = _censo()
     arq = S / "matriculas__relatorio_matriculas_2024.parquet"
-    if censo is None or not arq.exists():
-        print("\n== Q15 não executado: falta o Censo (rode 11) ou a série da SEEDF (rode 03)")
-        return
+    if not arq.exists():
+        raise Pulado("falta a serie de matriculas da SEEDF (rode 03)")
     c = censo[censo["ano"] == 2024].copy()
     c["QT_MAT_MED_PROP_NM"] = c["QT_MAT_MED_PROP"].fillna(0) + c["QT_MAT_MED_NM"].fillna(0)
     # a série da SEEDF é escola × idade × sexo × cor/raça: soma por escola
@@ -1705,19 +1717,209 @@ def q15() -> None:
     )
 
 
+# ---------------------------------------------------------------- Q16
+ETAPAS_Q16 = {
+    "FUN_AI": ("FUND_AI", "QT_MAT_FUND_AI", "AI", "anos iniciais"),
+    "FUN_AF": ("FUND_AF", "QT_MAT_FUND_AF", "AF", "anos finais"),
+    "MED": ("MED", "QT_MAT_MED", "EM", "ensino médio"),
+}
+FAIXAS_N = [0, 10, 20, 30, 50, 100, float("inf")]
+ROTULO_FAIXA = ["1-9", "10-19", "20-29", "30-49", "50-99", "100+"]
+
+
+def wilson_pp(n: float, p: float = 0.10, z: float = 1.96) -> float:
+    """Meia-largura do intervalo de Wilson de 95% para uma proporção, em p.p."""
+    if not n:
+        return float("nan")
+    meio = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / (1 + z * z / n)
+    return round(100 * meio, 1)
+
+
+def q16() -> None:
+    """Matriz de presença escola × etapa e o tamanho de cada denominador.
+
+    Entrada: `data/interim/seedf/escolas__relatorio_escolas_2025.parquet` (vetor
+             de oferta `INF_CRE`…`PROF`), `data/interim/inep/censo_escola_df.parquet`
+             (matrícula por etapa em 2025), `ideb_escolas_df.parquet` (2025),
+             `tdi_escolas_df.parquet`, `tnr_escolas_df.parquet` e
+             `tx_rend_escolas_df.parquet` (as três de 2025).
+    Saída:   `data/interim/q16_presenca_escola_etapa.csv` (uma linha por escola ×
+             etapa), `data/interim/q16_faixas_n.csv` (distribuição de n por etapa
+             e valor extremo por faixa, evidência do limiar de n pequeno) e o
+             resumo impresso.
+    Idempotente: sim — leitura e reescrita.
+
+    O denominador de n é a matrícula da etapa no Censo 2025 (`QT_MAT_FUND_AI`,
+    `QT_MAT_FUND_AF`, `QT_MAT_MED`), a mesma proxy do q13 (L-21). A etapa entra
+    quando o vetor de oferta da SEEDF diz 1 **ou** quando o Censo declara
+    matrícula maior que zero: a divergência entre os dois fica visível na coluna
+    `oferta_seedf`, não resolvida por escolha de um dos lados.
+
+    Estado ausente de indicador numa etapa ofertada é `ausente`, não zero
+    (L-30); estado vindo da fonte é copiado como está, inclusive
+    `nao_aplicavel` (L-59).
+    """
+    e = pd.read_parquet(S / "escolas__relatorio_escolas_2025.parquet").copy()
+    e["co"] = e["CO_ENTIDADE"].astype(str)
+    e["rede"] = e["Nome Rede"].map(NOME_REDE).fillna(e["Nome Rede"])
+    for col in ("INF_CRE", "INF_PRE", "FUND_AI", "FUND_AF", "MED", "EJA", "ESP", "PROF"):
+        e[col] = num(e[col]).fillna(0).astype(int)
+
+    censo = _censo()
+    c25 = censo[censo["ano"] == 2025].set_index("CO_ENTIDADE")
+    ideb = pd.read_parquet(INTERIM / "inep" / "ideb_escolas_df.parquet")
+    # só linha com valor entra no mapa: a linha com estado ausente não é Ideb
+    ideb = ideb[(ideb["ano"] == "2025") & (ideb["indicador"] == "ideb_observado")
+                & (ideb["estado"] == "valor")]
+    tdi = pd.read_parquet(INTERIM / "inep" / "tdi_escolas_df.parquet")
+    tnr = pd.read_parquet(INTERIM / "inep" / "tnr_escolas_df.parquet")
+    tx = pd.read_parquet(INTERIM / "inep" / "tx_rend_escolas_df.parquet")
+    tdi = tdi[tdi["NU_ANO_CENSO"] == "2025"]
+    tnr = tnr[tnr["NU_ANO_CENSO"] == "2025"]
+    ap = tx[(tx["NU_ANO_CENSO"] == "2025") & (tx["categoria"] == "aprovacao")]
+
+    def mapa(df: pd.DataFrame, recorte: str, coluna: str = "valor") -> dict:
+        d = df[df["recorte"] == recorte]
+        return d.set_index("CO_ENTIDADE")[coluna].to_dict()
+
+    linhas = []
+    for etapa, (oferta_col, mat_col, codigo, nome) in ETAPAS_Q16.items():
+        tdi_v, tdi_e = mapa(tdi, etapa), mapa(tdi, etapa, "estado")
+        tnr_v, tnr_e = mapa(tnr, etapa), mapa(tnr, etapa, "estado")
+        ap_v, ap_e = mapa(ap, etapa), mapa(ap, etapa, "estado")
+        ideb_etapa = ideb[ideb["etapa"] == codigo].set_index("ID_ESCOLA")
+        ideb_v = ideb_etapa["valor"].to_dict()
+        ideb_e = ideb_etapa["estado"].to_dict()
+        mat = c25[mat_col].to_dict()
+        for r in e.itertuples():
+            n = mat.get(r.co)
+            n = int(n) if pd.notna(n) else None
+            if not getattr(r, oferta_col) and not n:
+                continue
+            linhas.append(
+                {
+                    "co_entidade": r.co,
+                    "rede": r.rede,
+                    "etapa": nome,
+                    "oferta_seedf": int(getattr(r, oferta_col)),
+                    "matriculas_censo_2025": n,
+                    "ideb_2025": ideb_v.get(r.co),
+                    "ideb_estado": ideb_e.get(r.co, "ausente"),
+                    "tdi_2025": tdi_v.get(r.co),
+                    "tdi_estado": tdi_e.get(r.co, "ausente"),
+                    "tnr_2025": tnr_v.get(r.co),
+                    "tnr_estado": tnr_e.get(r.co, "ausente"),
+                    "aprovacao_2025": ap_v.get(r.co),
+                    "aprovacao_estado": ap_e.get(r.co, "ausente"),
+                }
+            )
+    m = pd.DataFrame(linhas).sort_values(["etapa", "co_entidade"])
+    m.to_csv(INTERIM / "q16_presenca_escola_etapa.csv", index=False)
+
+    # universos medidos, na mesma definição do REPORT §2.4
+    efem = e[(e["FUND_AI"] + e["FUND_AF"] + e["MED"]) > 0]
+    com_taxa = set(tdi["CO_ENTIDADE"]) if len(tdi) else set()
+    com_ideb = set(ideb["ID_ESCOLA"])
+    com_efem = set(efem["co"])
+    sem_indicador = com_efem - com_taxa - com_ideb
+    tdi_sem_ideb = (com_taxa & com_efem) - com_ideb
+    print("\n== Q16 presença escola × etapa (Censo 2025 como denominador)")
+    print(f"   cadastro 2025: {len(e):,} unidades; com EF/EM no vetor de oferta: {len(efem):,}; "
+          f"sem EF/EM: {len(e) - len(efem):,}")
+    print(f"   com TDI e fluxo 2025: {len(com_taxa):,} (fora do cadastro: "
+          f"{len(com_taxa - set(e['co'])):,}); com Ideb 2025: {len(com_ideb):,}")
+    print(f"   TDI sem Ideb: {len(tdi_sem_ideb):,}; sem indicador nenhum: {len(sem_indicador):,}"
+          f"{' (' + ', '.join(sorted(sem_indicador)) + ')' if sem_indicador else ''}")
+    print(f"   linhas escola × etapa: {len(m):,}")
+
+    u = m[m["tdi_estado"].isin(["valor", "zero"]) & m["matriculas_censo_2025"].notna()].copy()
+    u["faixa"] = pd.cut(u["matriculas_censo_2025"], FAIXAS_N, right=False, labels=ROTULO_FAIXA)
+    resumo = []
+    for etapa in ["anos iniciais", "anos finais", "ensino médio", "todas"]:
+        sub = u if etapa == "todas" else u[u["etapa"] == etapa]
+        for faixa, g in sub.groupby("faixa", observed=True):
+            n = g["matriculas_censo_2025"]
+            ap100 = ((g["aprovacao_2025"] == 100) & (g["aprovacao_estado"] == "valor")).mean()
+            resumo.append(
+                {
+                    "etapa": etapa,
+                    "faixa": str(faixa),
+                    "unidades": len(g),
+                    "n_min": int(n.min()),
+                    "n_mediana": float(n.median()),
+                    "n_max": int(n.max()),
+                    "tdi_zero_pct": round(100 * (g["tdi_2025"] == 0).mean(), 1),
+                    "aprovacao_100_pct": round(100 * ap100, 1),
+                    "wilson_hw_p10_pp": wilson_pp(float(n.median())),
+                }
+            )
+    faixas = pd.DataFrame(resumo)
+    faixas.to_csv(INTERIM / "q16_faixas_n.csv", index=False)
+    print("\n   n por faixa e valor extremo (unidades com TDI valor ou zero):")
+    print(faixas.to_string(index=False))
+    print(f"   unidades com n < 30: {(u['matriculas_censo_2025'] < 30).sum():,} em "
+          f"{u[u['matriculas_censo_2025'] < 30]['co_entidade'].nunique():,} escolas; "
+          f"n < 50: {(u['matriculas_censo_2025'] < 50).sum():,} em "
+          f"{u[u['matriculas_censo_2025'] < 50]['co_entidade'].nunique():,} escolas")
+
+
+ETAPAS = [
+    ("q1", q1), ("q2", q2), ("q3", q3), ("q4", q4), ("q5", q5), ("q6", q6),
+    ("q7", q7), ("q8", q8), ("q9", q9), ("q10", q10), ("q11", q11), ("q12", q12),
+    ("q13", q13), ("q14", q14), ("q15", q15), ("q16", q16),
+]
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Executa as etapas e registra o que rodou, o que pulou e por quê.
+
+    Saída: `data/interim/q0_execucao.csv`, uma linha por etapa, com
+    `status = executado|pulado` e o motivo. Código de saída 1 se alguma etapa
+    pulou (a menos de `--parcial`), 0 caso contrário.
+    """
+    import argparse
+    import time
+
+    ap = argparse.ArgumentParser(description="Respostas da fase 0, com registro de execução.")
+    ap.add_argument(
+        "--parcial",
+        action="store_true",
+        help="aceita etapa pulada e sai com zero; sem a flag, etapa pulada faz sair com 1",
+    )
+    args = ap.parse_args(argv)
+
+    execucao = []
+    for nome, funcao in ETAPAS:
+        inicio = time.time()
+        try:
+            funcao()
+            status, motivo = "executado", ""
+        except Pulado as exc:
+            status, motivo = "pulado", str(exc)
+            print(f"\n== {nome.upper()} PULADO: {motivo}")
+        execucao.append(
+            {
+                "etapa": nome,
+                "status": status,
+                "motivo": motivo,
+                "segundos": round(time.time() - inicio, 1),
+            }
+        )
+
+    registro = pd.DataFrame(execucao)
+    registro.to_csv(INTERIM / "q0_execucao.csv", index=False)
+    print("\n== execução: " + "; ".join(f"{r.etapa}={r.status}" for r in registro.itertuples()))
+    puladas = registro[registro["status"] == "pulado"]
+    if len(puladas) and not args.parcial:
+        print(
+            f"\n{len(puladas)} etapa(s) pulada(s): "
+            + ", ".join(puladas["etapa"])
+            + ". Veja o motivo em data/interim/q0_execucao.csv; "
+            "use --parcial para aceitar o resultado incompleto."
+        )
+        return 1
+    return 0
+
+
 if __name__ == "__main__":
-    q1()
-    q2()
-    q3()
-    q4()
-    q5()
-    q6()
-    q7()
-    q8()
-    q9()
-    q10()
-    q11()
-    q12()
-    q13()
-    q14()
-    q15()
+    raise SystemExit(main())
