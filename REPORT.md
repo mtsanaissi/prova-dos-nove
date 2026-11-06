@@ -49,7 +49,9 @@ malha. Nenhuma análise usa geometria.
 ## 2. As seis perguntas
 
 **2.1 Quantas unidades escolares existem no DF, por rede e por etapa?**
-1.291 unidades ativas em 2025 (`relatorio_escolas_2025.csv`): 669 rede estadual
+1.291 unidades escolares no cadastro de 2025 (`relatorio_escolas_2025.csv`; o
+cadastro não tem campo de situação, então "ativa" não é afirmação que o dado
+sustente — L-44): 669 rede estadual
 vinculada à SEEDF, 476 privadas não conveniadas, 131 privadas conveniadas, 11
 federais, 4 estaduais não vinculadas. Por etapa, contando unidades que ofertam
 cada uma (uma escola pode ofertar mais de uma):
@@ -63,6 +65,9 @@ cada uma (uma escola pode ofertar mais de uma):
 
 A creche inverte o resto: 468 das 475 unidades não são da rede estadual,
 majoritária nas outras etapas.
+
+*Limites que pesam nesta subseção: L-44, L-45, L-46, L-58. Cada id está em
+`docs/LIMITES.md`, com evidência, status e o que resolveria.*
 
 **2.2 A rede privada está coberta em todos os arquivos?**
 Não. Cobertura medida contra o cadastro de 2025 (`data/interim/q2_cobertura.csv`):
@@ -104,6 +109,9 @@ Distorção idade-série e não-resposta (`TDI_2025_ESCOLAS.zip`,
 privadas com fundamental ou médio, 575 de 576 estaduais e 11 federais. A TNR
 lista 150 privadas com médio, contra 37 no arquivo de Ideb — o Ideb privado
 ausente é não publicação.
+
+*Limites que pesam nesta subseção: L-11, L-19, L-31, L-36, L-37, L-59. Cada id está em
+`docs/LIMITES.md`, com evidência, status e o que resolveria.*
 
 Outra falha na série: `relatorio_matriculas_2023.csv` traz só rede pública (600
 escolas contra ~1.280 nos demais anos).
@@ -147,6 +155,9 @@ conveniada; **6,0% sem biblioteca nem sala de leitura** (Fercal 60,0% e Paranoá
 32,4% são os extremos, e são RAs pequenas); e, entre as 365 que têm biblioteca,
 **48,2% não têm bibliotecário** — 61,4% na estadual. A série 2014–2025, no mesmo
 universo, mostra falta de biblioteca estável entre 55,6% (2014) e 60,6% (2025) e
+
+*Limites que pesam nesta subseção: L-25, L-29, L-36, L-38, L-40, L-51. Cada id está em
+`docs/LIMITES.md`, com evidência, status e o que resolveria.*
 falta de qualquer espaço de leitura entre 6,0% e 7,6%: o que não existe é pouco,
 e o que existe é frágil. Por RA a falta de biblioteca vai de 0% (Arniqueira, 1
 escola; Varjão, 1) a 100% (SIA, 2 escolas; Park Way, 6; Candangolândia, 4), com
@@ -249,6 +260,9 @@ nos anos iniciais (p10–p90 4,1–15,0; 386 escolas), 17,1% nos finais (10,9–
 (1,0–8,3; 200) e 4,5% (1,0–10,6; 150). Nos finais e no médio o p10 da estadual
 supera o p90 da privada; a federal de médio (11 escolas) tem mediana 17,2%.
 
+*Limites que pesam nesta subseção: L-08, L-09, L-10, L-11, L-12, L-30, L-31, L-32, L-33, L-34, L-35, L-40, L-59, L-60. Cada id está em
+`docs/LIMITES.md`, com evidência, status e o que resolveria.*
+
 A taxa de não-resposta não explica o Ideb ausente em 2025: mede alunos sem
 informação de rendimento/movimento, não participação no Saeb, e não separa não
 participação de supressão (`q12_tnr_ideb_ausente.csv`; `tnr_escolas_2025.zip`).
@@ -315,6 +329,9 @@ relatório anterior comparava 26.076 matrículas em creche de criança com `IDAD
 com ~37.654 frequentando (PDAD) e concluía que ~11,6 mil não tinham explicação,
 com a hipótese "creche não declarada ao Censo" em aberto. O microdado do Censo
 resolve: **as duas contagens não medem a mesma coisa e a diferença é de
+
+*Limites que pesam nesta subseção: L-17, L-20, L-23, L-24, L-26, L-39, L-49, L-50, L-53, L-54. Cada id está em
+`docs/LIMITES.md`, com evidência, status e o que resolveria.*
 convenção, não de oferta.** O próprio Censo 2024 registra **37.595 matrículas de
 crianças de até 3 anos** na educação básica do DF (`QT_MAT_BAS_0_3`) — 59 a menos
 que as 37.654 da PDAD, 0,16%, dentro do intervalo de ±3,5 mil crianças (±2,5 p.p.)
@@ -335,6 +352,9 @@ para explicar.
   põem os códigos na linha 9, com `'--'` = não aplicável e padrões
   `FUN_AI_CAT_0` × `4_CAT_FUN_AI`. No Censo Escolar a mudança é de grão, não de
   coluna: desde 2024 sai a base por aluno e entra a base por escola (§2.7), e
+
+*Limites que pesam nesta subseção: L-13, L-14, L-15, L-29, L-57. Cada id está em
+`docs/LIMITES.md`, com evidência, status e o que resolveria.*
   entre 2024 e 2025 o arquivo, o nome e três colunas mudam outra vez.
 - **Ano fantasma:** `relatorio_infraestrutura_2016.csv` contém 2017 e é idêntico
   ao de 2017 (1.124 linhas): 2016 não existe.
@@ -470,6 +490,9 @@ comparadas, 16.480 iguais (98,7%) e 212 divergentes.
 | **Total da educação básica** | soma dos componentes ↔ `QT_MAT_BAS` | 1.167 de 1.284 | **−8.063** | **−1,28%** |
 
 O contraste com o Ideb é o achado: lá, 5.276 valores e **zero** divergências; aqui,
+
+*Limites que pesam nesta subseção: L-01, L-02, L-03, L-04, L-07, L-21, L-22, L-23, L-27, L-28, L-31, L-40, L-43, L-48, L-49. Cada id está em
+`docs/LIMITES.md`, com evidência, status e o que resolveria.*
 212 células divergem, e a diferença não é aleatória — 93 das 117 escolas com o
 total divergente são estaduais, e a maior parte do volume está no técnico
 subsequente (−5.755 em 14 escolas, uma delas com 1.482 alunos a menos) e na EJA
@@ -513,36 +536,49 @@ a variável não é contínua no território.
 
 ## 5. O que continua invisível
 
-- **Ideb 2023/2025 das escolas privadas.** Não é falta de download: os três
-  arquivos nacionais por escola não publicam valor privado depois de 2017 — em
-  iniciais e finais não há linha privada em UF alguma, e no médio as 1.247 linhas
-  do país têm valor só em 2017. No DF, 37 privadas de médio listadas, nenhuma com
-  Ideb em 2023 ou 2025 (`q8_escolas_rede.csv`); a TNR não fecha a lacuna — mede
-  não-resposta de rendimento, não participação no Saeb. O agregado por UF, região
-  e Brasil existe (§2.4); falta a distribuição entre escolas privadas. **Correção:**
-  a versão anterior esperava que os arquivos por escola trouxessem a rede privada;
-  eles trouxeram a confirmação da série da SEEDF e nenhum dado privado.
-- **População de 0–3 anos por RA — resolvida, com resíduo de precisão.** Não
-  falta o dado: faltava abrir três arquivos que o 05 tinha baixado como "PDF".
-  Os microdados da PDAD-A 2024 dão 139.116 crianças de 0–3 no DF (4,7% da
-  população) e frequência a creche por RA; o total expandido reproduz as tabelas
-  publicadas com desvio máximo de 0,01% por RA (§2.5). O que continua fora é a
-  **precisão por RA**: 14 a 184 pessoas por RA, meio-intervalo de 6 a 36 p.p. Por
-  isso nenhuma taxa por RA entra como número, só como agrupamento. Para reduzir a
-  variância seria preciso o agregado por setor censitário (Censo 2022) com chave
-  setor → RA, ou a própria PDAD-A com estrato e unidade primária, que o arquivo
-  não publica. E a idade em 31/03/2024 só existe para 49,6% das linhas (55,2% da
-  população de 0–3); por isso o projeto usa a idade na entrevista e declara a
-  convenção, em vez de fingir o corte.
-- **O aluno, e não a escola, no Censo Escolar.** A partir de 2024 a INEP publica
-  os microdados por estabelecimento: não há linha de aluno, data de nascimento
-  nem idade simples (§2.7). O que isso deixa fora: a distribuição de idade exata
-  das escolas que a SEEDF não republica (a série dela cobre o DF), o cruzamento
-  idade × etapa por aluno, e a explicação das divergências de EJA e educação
-  profissional entre as duas fontes. Nenhuma delas se resolve com download: a base
-  por aluno só existe no Sedap, com acesso restrito. O projeto não precisa dela
-  para as perguntas que faz hoje — mas não pode prometer idade exata em 2025 sem
-  passar pela série da SEEDF.
-- **Fechamento de escola e infraestrutura de 2016.** 277 códigos somem da série
-  sem motivo declarado, e o arquivo de 2016 é cópia de 2017 (§2.6). Um contato
-  institucional destravaria os dois; nenhum dado aberto substitui isso.
+Os limites deste relatório estão no registro `docs/LIMITES.md`; os ids abaixo
+são citáveis e cada frase desta seção depende deles. O registro separa limite da
+fonte, ausência, suposição, inferência, risco de leitura e decisão de escopo, e
+item fechado não volta aqui como pendência. Os limites que pesam sobre as tabelas
+do §2 estão citados ao fim de cada subseção, com os ids que as pesam; esta lista
+reúne o que não tem número possível.
+
+- **Ideb 2023/2025 das escolas privadas (L-08).** Não é falta de download: os
+  três arquivos nacionais por escola não publicam valor privado depois de 2017 —
+  em iniciais e finais não há linha privada em UF alguma, e no médio as 1.247
+  linhas do país têm valor só em 2017. No DF, 37 privadas de médio listadas,
+  nenhuma com Ideb em 2023 ou 2025 (`q8_escolas_rede.csv`); a TNR não fecha a
+  lacuna — mede não-resposta de rendimento, não participação no Saeb (L-09). O
+  agregado por UF, região e Brasil existe (§2.4); falta a distribuição entre
+  escolas privadas. A tentativa de fechar isso pelos arquivos por escola não
+  funcionou: eles trouxeram a confirmação da série da SEEDF e nenhum dado privado.
+- **Precisão da população de 0–3 anos por RA (L-17, L-23, L-52).** A ausência do
+  dado foi fechada pelos microdados da PDAD-A 2024 (L-52): 139.116 crianças de
+  0–3 no DF (4,7% da população), com desvio máximo de 0,01% por RA contra as
+  tabelas publicadas (§2.5). O que continua fora é a **precisão por RA**: 14 a 184
+  pessoas por RA, meio-intervalo de 6 a 36 p.p. (L-17). Por isso nenhuma taxa por
+  RA entra como número, só como agrupamento. Para reduzir a variância seria
+  preciso o agregado por setor censitário (Censo 2022) com chave setor → RA, ou a
+  própria PDAD-A com estrato e unidade primária, que o arquivo não publica (L-47).
+  E a idade em 31/03/2024 só existe para 49,6% das linhas (55,2% da população de
+  0–3; L-23); por isso o projeto usa a idade na entrevista e declara a convenção,
+  em vez de fingir o corte.
+- **O aluno, e não a escola, no Censo Escolar (L-03).** A partir de 2024 a INEP
+  publica os microdados por estabelecimento: não há linha de aluno, data de
+  nascimento nem idade simples (§2.7). O que isso deixa fora: a distribuição de
+  idade exata das escolas que a SEEDF não republica (a série dela cobre o DF), o
+  cruzamento idade × etapa por aluno, e a explicação das divergências de EJA e
+  educação profissional entre as duas fontes (L-01). Nenhuma delas se resolve com
+  download: a base por aluno só existe no Sedap, com acesso restrito. O projeto
+  não precisa dela para as perguntas que faz hoje — mas não pode prometer idade
+  exata em 2025 sem passar pela série da SEEDF. E a concordância entre SEEDF e
+  Censo não é confirmação independente: é a mesma operação estatística (L-07).
+- **Fechamento de escola e infraestrutura de 2016 (L-14, L-15).** 277 códigos
+  somem da série sem motivo declarado, e o arquivo de 2016 é cópia de 2017
+  (§2.6). Um contato institucional destravaria os dois; nenhum dado aberto
+  substitui isso.
+
+Os limites de cobertura e de comparabilidade do Ideb por escola (L-02, L-31,
+L-33) não estão nesta lista porque são medidos e estão no §2.4 e no §2.7(a), com
+os ids citados ao fim das duas subseções: mediana e ponderada descrevem
+coberturas diferentes, e 2023 e 2025 não são a mesma coorte de escolas.

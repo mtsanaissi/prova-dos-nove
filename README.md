@@ -35,6 +35,31 @@ consolidados — mas é desenhado para o Brasil.
 - **Não é avaliação de professores.** Nenhum dado público permite isso.
 - **Não é previsão.** O projeto descreve o que aconteceu e diz o que não sabe.
 
+## O que os números não dizem
+
+Todo número desta página tem procedência, mas nenhum é ilimitado. O registro
+completo, com evidência e status, está em [`docs/LIMITES.md`](docs/LIMITES.md);
+os ids abaixo apontam para ele.
+
+- **Escola sem Ideb não é escola com nota zero.** A ausência tem causa — menos de
+  10 alunos no Saeb ou participação abaixo de 80% — e a fonte não distingue, por
+  escola, não participação de resultado não publicado (L-09, L-30).
+- **O Ideb por escola cobre parte da matrícula.** Na rede estadual, a mediana do
+  médio vale para 64,8% dos alunos; a rede privada não tem Ideb por escola depois
+  de 2017 (L-02, L-08).
+- **A comparação nacional é de UF, não de escola**, e o DF no médio é comparado
+  pela rede estadual porque a planilha não publica "Pública" (L-10, L-32).
+- **Creche depende da convenção de idade e do denominador.** A faixa 0–3 do
+  Censo de 2024 não declara a data de referência; a leitura de que usa maio é
+  inferência declarada (L-27). A taxa por RA calculada pela escola não mede
+  atendimento, porque as crianças atravessam a fronteira da RA (L-39); a
+  estimativa da PDAD por RA tem n pequeno e agrupa RAs (L-17).
+- **A série da SEEDF é republicação do Censo.** Concordância entre as duas não é
+  confirmação independente; e a SEEDF subestima EJA e educação profissional
+  (L-01, L-07).
+- **Ponderar corrige composição, não cobertura.** O peso é a matrícula da etapa;
+  para o Ideb é uma aproximação da coorte que fez o Saeb (L-21, L-22).
+
 ## Princípios
 
 1. **Todo número tem endereço.** Cada valor exibido aponta para o arquivo, o
@@ -98,54 +123,60 @@ de cada arquivo, em [`SCHEMA.md`](SCHEMA.md); o que foi feito em cada etapa, em
 
 ### O que o reconhecimento já mostrou
 
+Os limites que pesam sobre estes números estão no bloco "O que os números não
+dizem" e no registro `docs/LIMITES.md`; cada bullet abaixo fecha com os ids que o
+limitam.
+
 - **A creche não é da rede estadual.** Em 2025, 468 das 475 unidades que ofertam
   creche no DF são privadas ou conveniadas; a rede estadual tem 7.
-  (`relatorio_escolas_2025.csv`)
+  (`relatorio_escolas_2025.csv`; L-36)
 - **A reputação do DF no IDEB não vale para a rede pública.** Em 2025, a rede
   estadual do DF ficou em 16º de 26 nos anos iniciais, 21º de 27 nos anos finais
   e **última de 27 no ensino médio** (3,6 contra 4,3 do Brasil). O número alto
   que circula é a linha "Total", que mistura a rede privada. Com o integrado à
   EPT a estadual continua última (3,6). (`q8_df_brasil_uf.csv`,
-  `q9_em_integrado.csv`)
+  `q9_em_integrado.csv`; L-10, L-31, L-32)
 - **Os arquivos nacionais por escola confirmam a série da SEEDF — e negam a
   privada.** Reproduzem os valores da SEEDF valor por valor (3.512 + 1.542 + 222,
   0 divergências) e não publicam Ideb de escola privada depois de 2017; a
   cobertura privada existe só como agregado de rede nas planilhas de UF e Brasil.
-  (`q8_conferencia_seedf.csv`, `q8_escolas_rede.csv`)
+  (`q8_conferencia_seedf.csv`, `q8_escolas_rede.csv`; L-07,
+  L-08)
 - **A desigualdade territorial existe, mas não é a manchete.** 38,5% da variância
   do IDEB de anos iniciais de 2025 está entre Regiões Administrativas — o resto
-  está dentro da mesma RA. (`ideb_ef_ai_2005_2025.csv`)
+  está dentro da mesma RA. (`ideb_ef_ai_2005_2025.csv`; L-40)
 - **27,1% das crianças de 0 a 3 anos frequentam creche; a meta é 50%.** São
   139.116 crianças na faixa e ~37.654 frequentando creche ou escola — faltam
   ~31,9 mil. Quase toda a creche pública é conveniada: a rede própria da SEEDF
   tem 0,3% da matrícula, e 57,3% está na rede conveniada.
-  (`pdad_frequencia.parquet`, `relatorio_matriculas_2024.csv`)
+  (`pdad_frequencia.parquet`, `relatorio_matriculas_2024.csv`; L-17,
+  L-23, L-24, L-39)
 - **A diferença entre Censo e PDAD na creche era convenção de idade.** O Censo
   conta 37.595 crianças de 0–3 matriculadas contra 37.654 frequentando na PDAD
   (0,16%, dentro do intervalo da amostra); os 26.076 que circulavam eram creche ×
   idade no ano, não a faixa 0–3. E a creche é oferta privada: 475 unidades em
   2025, 7 da rede estadual, 99,7% da matrícula na privada. (`REPORT.md` §2.7,
-  `q14_creche_fecho.csv`)
+  `q14_creche_fecho.csv`; L-27, L-49, L-50)
 - **As medianas por escola descrevem a escola típica, e a versão ponderada quase
   não muda o número.** Com o peso de matrícula do Censo 2025, estadual e privada
   ficam em 1,0 p.p. ou menos, com três exceções (abandono e reprovação no médio
   estadual, +1,6 e +1,5 p.p.; distorção no médio da pequena rede federal, −3,0).
   Nenhuma ordem entre redes se inverte. O ganho real é saber a cobertura: o Ideb
-  por escola cobre 65% da matrícula do médio estadual. (`q13_ponderacao_df.csv`)
+  por escola cobre 65% da matrícula do médio estadual. (`q13_ponderacao_df.csv`; L-02, L-21, L-22, L-31)
 - **A distorção idade-série separa as redes.** Em 2025, a mediana na rede
   estadual é 9,0% nos anos iniciais, 17,1% nos finais e 20,7% no médio; na
   privada, 1,2%, 3,2% e 4,5% — nos finais e no médio, o p10 da estadual fica
-  acima do p90 da privada. (`TDI_2025_ESCOLAS.zip`, `q11_distorcao_df.csv`)
+  acima do p90 da privada. (`TDI_2025_ESCOLAS.zip`, `q11_distorcao_df.csv`; L-11, L-59)
 - **O fluxo separa as redes na mesma direção.** Em 2025, no ensino médio, a
   mediana de aprovação é 98,3% na rede privada (139 escolas) contra 82,5% na
   estadual (101), com abandono 0,0% contra 2,4%. (`tx_rend_escolas_2025.zip`,
-  `q10_fluxo_df.csv`)
+  `q10_fluxo_df.csv`; L-11, L-36, L-59)
 - **A não-resposta não explica o Ideb ausente.** A TNR mede falta de informação
   de rendimento/movimento, não participação no SAEB; não tem campo que separe
   não participação de supressão, e escolas com e sem Ideb têm a mesma
   distribuição. TDI e TNR cobrem as mesmas 925 escolas do DF, todas casadas com
   o censo de 2025 (100%), 336 delas privadas. (`tnr_escolas_2025.zip`,
-  `q12_tnr_ideb_ausente.csv`)
+  `q12_tnr_ideb_ausente.csv`; L-09, L-11, L-59)
 
 Duas correções de método, em 2026-10-23: a leitura "36,2% da matrícula de creche
 é de 4 anos ou mais" (idade no ano do censo não é idade em 31/03) e o número de
@@ -154,24 +185,26 @@ sobre um universo restrito às escolas que ofertam fundamental/médio).
 
 ### O que falta
 
-- **Ideb por escola da rede privada.** A INEP não publica valor privado depois de
-  2017 em nenhum dos três arquivos por escola (`REPORT.md` §5).
-- **População de 0–3 por RA, com precisão.** O total do DF está resolvido pelos
-  microdados da PDAD-A; por RA o n vai de 14 a 184 pessoas e o meio-intervalo de
-  6 a 36 p.p., então RA entra como agrupamento, nunca como taxa. Só agregado por
-  setor censitário com chave setor → RA, ou uma PDAD-A com estrato e unidade
-  primária, resolveria. (`10_ingest_pdad.py`)
-- **Idade em 31/03.** A data de nascimento (`E02_1`) só está preenchida em 49,6%
-  das linhas (55,2% da população de 0–3), então a convenção de 31/03 não
+- **Ideb por escola da rede privada (L-08).** A INEP não publica valor privado
+  depois de 2017 em nenhum dos três arquivos por escola (`REPORT.md` §5).
+- **População de 0–3 por RA, com precisão (L-17).** O total do DF está
+  resolvido pelos microdados da PDAD-A; por RA o n vai de 14 a 184 pessoas e o
+  meio-intervalo de 6 a 36 p.p., então RA entra como agrupamento, nunca como
+  taxa. Só agregado por setor censitário com chave setor → RA, ou uma PDAD-A com
+  estrato e unidade primária, resolveria. (`10_ingest_pdad.py`)
+- **Idade em 31/03 (L-23).** A data de nascimento (`E02_1`) só está preenchida em
+  49,6% das linhas (55,2% da população de 0–3), então a convenção de 31/03 não
   substitui a idade na entrevista.
-- **Microdado do Censo Escolar por escola**, ainda não ingerido: é o que
-  resolveria a diferença de ~11,6 mil entre Censo e PDAD na creche.
-- **População por RA do Censo 2022**, não ingerida: a API do IBGE só alcança o
-  DF como um município.
-- **Fechamento de escola e infraestrutura de 2016.** 277 códigos somem da série
-  sem motivo declarado e o arquivo de 2016 é cópia de 2017 (`REPORT.md` §2.6).
-- **Mapa.** Nenhuma análise usa geometria: `CO_RA` entra como atributo, e as
-  bibliotecas geográficas seguem fora de `requirements.txt` até haver análise
+- **Causa das divergências entre SEEDF e Censo na matrícula (L-01).** A série da
+  SEEDF subestima EJA e educação profissional; a base por aluno que explicaria
+  não é pública.
+- **População por RA do Censo 2022 (L-47)**, não ingerida: a API do IBGE só
+  alcança o DF como um município.
+- **Fechamento de escola e infraestrutura de 2016 (L-14, L-15).** 277 códigos
+  somem da série sem motivo declarado e o arquivo de 2016 é cópia de 2017
+  (`REPORT.md` §2.6).
+- **Mapa (L-46).** Nenhuma análise usa geometria: `CO_RA` entra como atributo, e
+  as bibliotecas geográficas seguem fora de `requirements.txt` até haver análise
   espacial validada.
 
 ## Estrutura
@@ -184,6 +217,7 @@ sobre um universo restrito às escolas que ofertam fundamental/médio).
 ├── requirements.txt        # dependências
 ├── docs/
 │   ├── nome.md             # a origem do nome, contada para crianças
+│   ├── LIMITES.md          # registro de limites, suposições e riscos
 │   └── worklogs/           # registro técnico do que foi feito, por data
 ├── data/
 │   ├── raw/                # originais (fora do git) + MANIFEST.md (dentro)
