@@ -1,11 +1,17 @@
 """Fontes externas: PDAD-A 2024 (IPEDF), INEP e malha territorial.
 
 Entrada: `https://pdad.ipe.df.gov.br/api/upts_reports/` (PDFs por RA),
-         páginas do INEP (Censo Escolar) e portais territoriais do GDF.
+         páginas do INEP (Censo Escolar) e portais territoriais do GDF. Com
+         `--offline`, só `data/raw/pdad/` e as notas do `MANIFEST`.
 Saída:   `data/raw/pdad/*.pdf` + linhas no MANIFEST
          `data/interim/pdad_populacao.csv` (população por faixa etária, por RA)
-         `data/interim/fontes_externas_status.csv` (o que abriu e o que não)
+         `data/interim/fontes_externas_status.csv` (o que abriu e o que não;
+         não é gravado em `--offline`)
 Idempotente: sim — PDF já baixado não é baixado de novo.
+
+`--offline` reconstrói `pdad_populacao.csv` a partir dos PDFs já baixados e das
+notas "relatório por RA: <nome>" do MANIFEST, sem tocar a API. É o que permite
+rodar `06` e `10` em cópia limpa sem rede (V1).
 
 Achado central: a PDAD-A 2024 publica faixas "até 4 anos", "5 a 9 anos", ... —
 não existe faixa 0–3. Qualquer conta de creche usa, portanto, 0–4 anos, que
@@ -20,7 +26,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from _common import DOWNLOAD_DATE, INTERIM, RAW, append_manifest, download, sha256
+from _common import DOWNLOAD_DATE, INTERIM, MANIFEST, RAW, append_manifest, download, sha256
 
 PDAD = "https://pdad.ipe.df.gov.br"
 DEST = RAW / "pdad"
@@ -70,9 +76,60 @@ def ler_pdf(caminho) -> dict:
     }
 
 
-def main() -> None:
+def tabela_populacao(linhas: list[dict]) -> pd.DataFrame:
+    """DataFrame de população por RA, com as duas colunas de procedência."""
+    pop = pd.DataFrame(linhas)
+    pop["fonte"] = "PDAD-A 2024, tabela 'População por faixa etária e sexo'"
+    pop["faixa"] = "até 4 anos (não existe 0–3 na PDAD-A)"
+    return pop
+
+
+def populacao_offline() -> pd.DataFrame:
+    """Reconstrói a tabela de população sem rede, do MANIFEST e de `data/raw/pdad`.
+
+    A ponte entre arquivo e RA é a nota do MANIFEST ("relatório por RA: <nome>"),
+    escrita por este script no download. Se um arquivo registrado não existe no
+    disco, para — não completa a tabela com ausência silenciosa.
+    """
+    linhas = []
+    for linha in MANIFEST.read_text(encoding="utf-8").splitlines():
+        if not linha.startswith("| `") or "IPEDF/PDAD-A 2024" not in linha:
+            continue
+        campos = [c.strip() for c in linha.strip().strip("|").split(" | ")]
+        if len(campos) != 7 or not campos[6].startswith("relatório por RA:"):
+            continue
+        arquivo = DEST / campos[0].strip("`")
+        if not arquivo.exists():
+            raise SystemExit(f"--offline: {arquivo} está no MANIFEST e não no disco")
+        nome = campos[6].split(":", 1)[1].strip()
+        vals = ler_pdf(arquivo) if eh_pdf(arquivo) else {"pop_0_4": None, "pop_total": None}
+        linhas.append({"ra_pdad": nome, "ra": norm(nome), **vals})
+    if not linhas:
+        raise SystemExit("--offline: nenhum relatório da PDAD-A no MANIFEST")
+    return tabela_populacao(linhas)
+
+
+def main(argv: list[str] | None = None) -> int:
     import json
     import urllib.request
+
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Fontes externas: PDAD-A, INEP e malha.")
+    ap.add_argument(
+        "--offline",
+        action="store_true",
+        help="não acessa a rede: reconstrói pdad_populacao.csv do que está em data/raw",
+    )
+    args = ap.parse_args(argv)
+
+    if args.offline:
+        INTERIM.mkdir(parents=True, exist_ok=True)
+        pop = populacao_offline()
+        pop.to_csv(INTERIM / "pdad_populacao.csv", index=False)
+        print(pop.to_string(index=False))
+        print(f"\n--offline: {len(pop)} RA(s) em data/interim/pdad_populacao.csv; status da rede não foi tocado")
+        return 0
 
     STATUS.parent.mkdir(parents=True, exist_ok=True)
     status = []
@@ -123,9 +180,7 @@ def main() -> None:
         print(f"  {nome[:40]:42} 0-4 anos: {vals['pop_0_4']}")
 
     append_manifest(registros)
-    pop = pd.DataFrame(linhas)
-    pop["fonte"] = "PDAD-A 2024, tabela 'População por faixa etária e sexo'"
-    pop["faixa"] = "até 4 anos (não existe 0–3 na PDAD-A)"
+    pop = tabela_populacao(linhas)
     pop.to_csv(INTERIM / "pdad_populacao.csv", index=False)
     status.append(
         {
@@ -189,7 +244,8 @@ def main() -> None:
 
     pd.DataFrame(status).to_csv(STATUS, index=False)
     print(pd.DataFrame(status).to_string(index=False))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
