@@ -45,8 +45,38 @@ inteira, n = 1.
 | 5 | fluxo | `tx_rend_escolas_df.parquet`, `categoria ∈ {aprovacao, reprovacao, abandono}` | 2025 | percentual da etapa, como publicado | 1.355 unidades escola × etapa | L-11, L-59, L-21, D4 |
 | 6 | distorção idade-série | `tdi_escolas_df.parquet` | 2025 | percentual da etapa | 1.355 unidades | L-11, L-59, L-40, D4 |
 | 7 | não-resposta | `tnr_escolas_df.parquet` | 2025 | percentual da etapa | 1.355 unidades | L-09, L-11, L-59 |
-| 8 | infraestrutura | `relatorio_infraestrutura_*`, colunas `IN_*` | 2025 | presença do item; universo de 927 escolas de EF/EM | 927 | L-25, L-29, L-38, L-51 |
+| 8 | infraestrutura | `relatorio_infraestrutura_2025.parquet`, colunas `IN_*` | 2025 | presença do item, nos 8 itens listados abaixo | 927 | L-25, L-29, L-38, L-51 |
 | 9 | creche da escola | Censo INEP, `censo_escola_df.parquet` (`QT_MAT_INF_CRE`) | 2024–2025 | matrícula em creche da escola, como está no campo | unidades com `INF_CRE = 1` (475 em 2025) | L-27, L-28, L-62 |
+
+**Itens de infraestrutura publicados (decisão do mantenedor, 2026-11-06).**
+Oito linhas, ano de 2025, universo das 927 escolas que oferecem ensino
+fundamental ou médio. O item é o que a escola declarou ao Censo Escolar; a
+coluna é a do arquivo, repetida aqui para o export não ter de adivinhar.
+
+| linha na página | coluna | escolas com o item (927) |
+|---|---|---|
+| Biblioteca | `IN_BIBLIOTECA` | 39,4% |
+| Sala de leitura | `IN_SALA_LEITURA` | 80,5% |
+| Quadra de esportes | `IN_QUADRA_ESPORTES` | 85,1% |
+| Laboratório de informática | `IN_LABORATORIO_INFORMATICA` | 47,0% |
+| Laboratório de ciências | `IN_LABORATORIO_CIENCIAS` | 35,1% |
+| Internet para os alunos | `IN_INTERNET_ALUNOS` | 46,4% |
+| Refeitório | `IN_REFEITORIO` | 48,3% |
+| Banheiro acessível (cadeirante) | `IN_BANHEIRO_PNE` | 94,3% |
+
+Três decisões embutidas nesta lista, todas com motivo:
+
+- **Biblioteca e sala de leitura são duas linhas, não uma.** A fonte separa os
+  dois itens (39,4% e 80,5%) e 94,0% das escolas têm pelo menos um. Mostrar só
+  "biblioteca" diria "não tem espaço de leitura" para escola que tem sala de
+  leitura — exatamente o erro que L-51 fechou. A linha combinada
+  (`IN_BIBLIOTECA_SALA_LEITURA`, 94,0%) não substitui as duas.
+- **Fora da lista por não informarem nada:** água potável (100%), internet sem
+  qualificação (100%) e banheiro (99,9%). Um "sim" em toda escola não descreve
+  escola nenhuma.
+- **Quadra é a geral (`IN_QUADRA_ESPORTES`, 85,1%), não a coberta** (63,1%): a
+  pergunta que o leitor faz é "tem quadra?", e o detalhe de cobertura fica para
+  quando houver espaço na página.
 
 Regras que valem para todos os blocos:
 
@@ -114,7 +144,7 @@ o build lê. Quatro arquivos, nenhum com microdado, nenhum com linha de aluno:
 |---|---|---|---|
 | `escolas.parquet` | escola (1.291) | `co_entidade`, `nome`, `ra`, `rede`, `oferta_inf_cre`…`oferta_prof` (8 flags), `mat_inf_cre_2024`, `mat_fund_ai_2024`, `mat_fund_af_2024`, `mat_med_2024` e as quatro de 2025 | 240 KB |
 | `indicadores.parquet` | escola × etapa × indicador × ano | `co_entidade`, `etapa` (`AI`/`AF`/`EM`), `indicador` (`ideb_observado`, `ideb_projetado`, `tdi`, `tnr`, `aprovacao`, `reprovacao`, `abandono`), `ano`, `valor`, `estado` | 900 KB |
-| `infraestrutura.parquet` | escola × item | `co_entidade`, `item` (nome da coluna `IN_*`), `ano` (2025), `valor` (0/1), `estado` | 120 KB |
+| `infraestrutura.parquet` | escola × item (8 itens do §2) | `co_entidade`, `item` (nome da coluna `IN_*`), `ano` (2025), `valor` (0/1), `estado` | 25 KB |
 | `procedencia.json` | um registro por indicador/família | `fonte`, `arquivo`, `anos`, `calculo`, `limites` e o `sha256` dos três parquets acima | 15 KB |
 
 Regras do export, todas verificáveis:
