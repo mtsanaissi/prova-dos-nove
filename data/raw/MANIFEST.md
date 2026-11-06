@@ -160,6 +160,14 @@ Registro de metadados errados neste manifesto. O conteúdo do arquivo não muda:
 `sha256` e bytes continuam valendo; o que se corrige é o que o manifesto diz
 sobre ele.
 
+- **2026-11-06 — `.xlsx` do médio integrado não é o do servidor.** O arquivo
+  `2026-10-22_divulgacao_ufs_Ensino_Medio_integrado_ideb_2025.xlsx` tem 31.398 B
+  aqui e 31.594 B no servidor (`Last-Modified` de 2026-08-19, anterior ao
+  download de 2026-10-22). O conteúdo é idêntico: 2.430 células em A1:BB45, zero
+  diferenças. O `docProps/core.xml` local diz Excel Online e traz a data do
+  download; o do servidor diz Microsoft Excel. Bytes e `sha256` locais ficam
+  como estão — o que se corrige é a afirmação de que o registro descreve o
+  arquivo atual do servidor (L-05).
 - **2026-11-06 — duas linhas fora da tabela.** As linhas de
   `2026-10-23_microdados_censo_escolar_2024.zip` e `..._2025_.zip` estavam
   dentro de `## Correções`: `_common.append_manifest` inseria antes de

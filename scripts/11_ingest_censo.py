@@ -124,7 +124,7 @@ ANCORAS = {
     2024: {"QT_MAT_INF_CRE": 40_851, "escolas_com_matricula": 1_284},
     2025: {"QT_MAT_INF_CRE": 42_582, "escolas_com_matricula": 1_291},
 }
-TOLERANCIA = 0.005  # 0,5%
+TOLERANCIA = 0.0  # âncora conhecida tem de fechar exata (L-06)
 
 
 def localizar(ano: int) -> Path:
@@ -254,8 +254,8 @@ def _varrer(
     return linhas, nacionais, cabecalho
 
 
-def conferir(df: pd.DataFrame, ano: int) -> list[dict]:
-    """Checagens de conteúdo. Devolve linhas para o censo_metodo.csv."""
+def checar(df: pd.DataFrame, ano: int) -> list[dict]:
+    """Checagens de conteúdo, sem interromper: devolve todas as linhas."""
     linhas = []
     for coluna, esperado in ANCORAS[ano].items():
         if coluna == "escolas_com_matricula":
@@ -275,11 +275,6 @@ def conferir(df: pd.DataFrame, ano: int) -> list[dict]:
                 "resultado": "ok" if desvio <= TOLERANCIA else "FALHOU",
             }
         )
-        if desvio > TOLERANCIA:
-            raise RuntimeError(
-                f"{ano}: {coluna} = {valor:,.0f}, esperado {esperado:,} "
-                f"(desvio {100 * desvio:.1f}%) — a leitura está errada, não a fonte"
-            )
 
     # as faixas etárias têm de particionar QT_MAT_BAS, escola por escola (entre
     # as que declaram matrícula: a célula vazia é ausência, não zero)
@@ -329,13 +324,85 @@ def conferir(df: pd.DataFrame, ano: int) -> list[dict]:
     return linhas
 
 
-def main() -> int:
+def validar(linhas: list[dict], ano: int) -> None:
+    """Levanta RuntimeError se alguma âncora falhou.
+
+    A mensagem não culpa a leitura antes de conferir o arquivo: o primeiro
+    suspeito é o zíper ter mudado no servidor (L-05, L-06).
+    """
+    falhas = [l for l in linhas if l["resultado"] == "FALHOU"]
+    if not falhas:
+        return
+    pior = max(falhas, key=lambda l: float(l["desvio_pct"] or 0))
+    raise RuntimeError(
+        f"{ano}: {pior['checagem']} = {pior['valor']:,.0f}, esperado "
+        f"{pior['esperado']:,} (desvio {pior['desvio_pct']:.3f}%). Antes de culpar "
+        "a leitura, confira o sha256 do zip contra o MANIFEST: se o arquivo mudou "
+        "no servidor, a leitura pode estar certa."
+    )
+
+
+def conferir(df: pd.DataFrame, ano: int) -> list[dict]:
+    """checar + validar. É o que o --autoteste usa para provar que o script para."""
+    linhas = checar(df, ano)
+    validar(linhas, ano)
+    return linhas
+
+
+def autoteste(argv: list[str]) -> int:
+    """Prova que uma âncora perturbada faz o script parar, e que a intacta passa.
+
+    Entrada: `data/interim/inep/censo_escola_df.parquet` já gravado.
+    Saída:   código 0 se o negativo passou (RuntimeError na âncora perturbada) e
+             o positivo também; 1 se a perturbação passou batida.
+    Idempotente: sim — só lê.
+    """
+    arq = DEST / "censo_escola_df.parquet"
+    if not arq.exists():
+        raise SystemExit("--autoteste: falta o parquet; rode o script uma vez")
+    df = pd.read_parquet(arq)
+    df = df[df["ano"] == 2025].copy()
+    conferir(df, 2025)
+    print("ok: dataframe intacto passa nas âncoras")
+    for coluna in ANCORAS[2025]:
+        if coluna == "escolas_com_matricula":
+            continue
+        perturbado = df.copy()
+        perturbado[coluna] = pd.to_numeric(perturbado[coluna]).astype(float)
+        perturbado.iloc[0, perturbado.columns.get_loc(coluna)] += 1
+        try:
+            conferir(perturbado, 2025)
+        except RuntimeError as exc:
+            print(f"ok: {coluna} + 1 → RuntimeError — {str(exc)[:110]}")
+            return 0
+    print("FALHA: nenhuma âncora perturbada levantou RuntimeError")
+    return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Recorte do DF dos microdados do Censo Escolar.")
+    ap.add_argument(
+        "--autoteste",
+        action="store_true",
+        help="prova que uma âncora perturbada faz o script parar (não grava nada)",
+    )
+    args = ap.parse_args(argv)
+    if args.autoteste:
+        return autoteste(argv)
+
     DEST.mkdir(parents=True, exist_ok=True)
     partes, metricas = [], []
     for ano in sorted(POR_ANO):
         df, m = ler_ano(ano)
         partes.append(df)
-        metricas.extend(conferir(df, ano))
+        linhas_ano = checar(df, ano)
+        metricas.extend(linhas_ano)
+        # grava antes de validar: se a âncora falhar, a linha "FALHOU" já está no
+        # CSV, em vez de se perder com a exceção (era o defeito de L-06)
+        pd.DataFrame(metricas).to_csv(DEST / "censo_metodo.csv", index=False)
+        validar(linhas_ano, ano)
         print(
             f"{ano}: {m['linhas_nacionais']:,} linhas nacionais, {m['linhas_df']:,} do DF "
             f"({m['pct_df_do_nacional']}%) | {m['colunas_no_arquivo']} colunas, "

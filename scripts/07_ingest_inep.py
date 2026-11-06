@@ -40,7 +40,7 @@ CATALOGO = [
         "arquivo": "divulgacao_regioes_ufs_ideb_2025.zip",
         "url": BASE + "ideb/resultados/divulgacao_regioes_ufs_ideb_2025.zip",
         "fonte": "INEP/Ideb",
-        "bytes_conhecidos": 757_760,
+        "bytes_conhecidos": 757_970,
         "prioridade": 1,
         "acrescenta": "Ideb por UF e região: única forma de situar o DF no país",
     },
@@ -121,7 +121,7 @@ CATALOGO = [
     },
     {
         "arquivo": "microdados_censo_escolar_2024.zip",
-        "url": BASE + "microdados/microdados_censo_escolar_2024.zip",
+        "url": BASE + "dados_abertos/microdados_censo_escolar_2024.zip",
         "fonte": "INEP/Censo Escolar",
         "bytes_conhecidos": 33_829_396,
         "prioridade": 2,
@@ -135,7 +135,7 @@ CATALOGO = [
         # entregou ao navegador; o arquivo não é renomeado para o registro bater
         # com o que entrou.
         "arquivo": "microdados_censo_escolar_2025_.zip",
-        "url": BASE + "microdados/microdados_censo_escolar_2025_.zip",
+        "url": BASE + "dados_abertos/microdados_censo_escolar_2025_.zip",
         "fonte": "INEP/Censo Escolar",
         "bytes_conhecidos": 537_217_189,
         "prioridade": 2,
