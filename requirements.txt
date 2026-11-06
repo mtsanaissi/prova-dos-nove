@@ -1,5 +1,9 @@
-pandas>=2.2
-pyarrow>=17.0
-requests>=2.32
-openpyxl>=3.1
-pypdf>=5.0
+# Versões pinadas nas instaladas no ambiente de referência (Python 3.12.3).
+# `requests` saiu: nenhum script o importa (o download usa `urllib.request`).
+# `numpy` entrou: `10_ingest_pdad.py` o importa direto (variância da PDAD), então
+# não pode depender só da instalação indireta via pandas.
+pandas==3.1.0
+pyarrow==26.0.0
+numpy==2.5.4
+openpyxl==3.1.5
+pypdf==6.21.2

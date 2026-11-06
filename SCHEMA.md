@@ -10,14 +10,23 @@ Preenchido a partir de `scripts/03_profile_seedf.py` (`data/interim/profile_file
 
 ## Vocabulário controlado
 
-Toda célula vazia precisa ser classificada como uma destas três coisas — e o
-código precisa distinguir as três, não colapsar em `NaN`:
+Toda célula vazia precisa ser classificada como uma destas **quatro** coisas — e
+o código precisa distinguir as quatro, não colapsar em `NaN`:
 
 | Estado | Significado | Exemplo |
 |---|---|---|
+| `valor` | o dado existe e está informado | Ideb 6,0 em 2025 |
 | `zero` | o valor é zero | escola com 0 matrículas em creche |
 | `ausente` | deveria existir e não foi informado ou não foi coletado | escola privada sem IDEB por não participar do SAEB |
 | `nao_aplicavel` | a categoria não se aplica ao caso | taxa de abandono no ensino médio em escola que só tem infantil |
+
+O que cada família de fonte pode emitir, medido nos parquets (2026-11-06):
+
+| família | estados presentes | o que falta |
+|---|---|---|
+| Ideb por escola (`ideb_escolas_df`) | `valor`, `ausente` | não emite `zero` nem `nao_aplicavel`: nota zero não existe na escala e a etapa não ofertada simplesmente não tem linha |
+| TDI, TNR e fluxo por escola (`tdi_escolas_df`, `tnr_escolas_df`, `tx_rend_escolas_df`) | `valor`, `zero`, `nao_aplicavel` | não emite `ausente`: a célula vazia da fonte é sempre etapa sem matrícula (`--`) |
+| Censo por escola (`censo_escola_df`) | `valor`, `ausente` | matrícula não declarada é ausência (as 76 escolas de 2024, L-28); `zero` existe quando o campo é 0 |
 
 Convenção adotada no código: nulo = `ausente`; `0` = zero; coluna que não existe
 naquele ano = `nao_aplicavel`. Onde a fonte usa `"NULL"`, `"-"` ou `""` como
@@ -592,3 +601,18 @@ O Censo Escolar usa `CO_ENTIDADE` e casa 1.284 de 1.284 (2024) e 1.291 de 1.291
 (2025); as 76 escolas que a edição de 2024 lista a mais têm matrícula vazia e
 ficam fora de qualquer soma. As 925 escolas com TDI/TNR têm peso de matrícula em
 2025 — medido em `q13_ponderacao_df.csv`, não suposto.
+
+## Artefatos de execução e de presença (2026-11-06)
+
+Dois CSVs de `data/interim/` não são resposta de pergunta, são controle:
+
+| arquivo | grão | colunas | para que serve |
+|---|---|---|---|
+| `q0_execucao.csv` | etapa (`q1`…`q16`) | `etapa`, `status` (`executado`/`pulado`), `motivo`, `segundos` | prova que `06_analysis.py` rodou inteiro; `main()` sai com 1 se alguma etapa pulou, a menos de `--parcial` |
+| `q16_presenca_escola_etapa.csv` | escola × etapa (anos iniciais, finais, médio) | `co_entidade`, `rede`, `etapa`, `oferta_seedf`, `matriculas_censo_2025`, `ideb_2025`, `ideb_estado`, `tdi_2025`, `tdi_estado`, `tnr_2025`, `tnr_estado`, `aprovacao_2025`, `aprovacao_estado` | a matriz de presença e o denominador de n de cada indicador; é a base do contrato de `docs/FASE-1.md` |
+| `q16_faixas_n.csv` | etapa × faixa de n | `unidades`, `n_min`, `n_mediana`, `n_max`, `tdi_zero_pct`, `aprovacao_100_pct`, `wilson_hw_p10_pp` | a evidência do limiar de n pequeno (D4 = 30) |
+
+A etapa entra na matriz quando o vetor de oferta da SEEDF diz 1 **ou** quando o
+Censo declara matrícula maior que zero: a divergência fica visível em
+`oferta_seedf`, não resolvida. Indicador sem linha para uma etapa ofertada entra
+como `ausente`; o estado que veio da fonte é copiado como está (L-59).

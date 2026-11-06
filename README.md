@@ -88,10 +88,15 @@ os ids abaixo apontam para ele.
 | [PDAD / IPEDF](https://pdad.ipe.df.gov.br/) | Perfil demográfico e socioeconômico por Região Administrativa, inclusive os **microdados** de moradores e domicílios (peso amostral, idade, frequência escolar, RA de estudo). | API de relatórios, `05`; microdados, `10` |
 | [IDE/DF — Geoserviços](https://www.geoservicos.ide.df.gov.br/) | Malha das Regiões Administrativas (serviço ArcGIS, 37 RAs). | download automático, `09` |
 
-O `download.inep.gov.br` responde ao navegador, mas não ao `urllib`/`curl` deste
-ambiente. Por isso os arquivos da INEP entram por `data/raw/inep/inbox/`, com
-hash e registro conferidos por `07_ingest_inep.py`. O caminho é declarado, não
-escondido: nenhum script finge que baixou o que não baixou.
+O `download.inep.gov.br` serve **cadeia TLS incompleta** — o certificado é emitido
+sob a RNP ICPEdu e `curl`/`urllib` sem a CA correspondente recusam a conexão
+(`curl` sai 60, `openssl s_client` devolve 21). Não é bloqueio da fonte: com
+`curl -sk` o arquivo de 33,8 MB do Censo 2024 foi baixado em 2026-11-06 e o
+sha256 confere com o `MANIFEST`. Por isso os arquivos da INEP entram por
+`data/raw/inep/inbox/`, com hash e registro conferidos por `07_ingest_inep.py`,
+e a conferência de sha256 contra o `MANIFEST` é obrigatória antes de qualquer
+uso. O caminho é declarado, não escondido: nenhum script finge que baixou o que
+não baixou.
 
 ## Estado
 
@@ -120,6 +125,23 @@ de 2025 e na PDAD-A 2024; `26 de Setembro` e `Ponte Alta` existem só na malha.
 O escopo, os números e os vereditos estão em [`REPORT.md`](REPORT.md); os campos
 de cada arquivo, em [`SCHEMA.md`](SCHEMA.md); o que foi feito em cada etapa, em
 [`docs/worklogs/`](docs/worklogs/).
+
+**Critério de saída da fase 0 (2026-11-06).** Em cópia limpa — só o que está no
+git, com `data/raw` por symlink e sem `data/interim/` — rodar na ordem `01 → 02 →
+05 → 09 → 07 → 08 → 11 → 10 → 03 → 04 → 06` e comparar: parquets por hash de
+conteúdo ordenado (`hash_pandas_object` sobre linhas ordenadas pela chave), CSVs
+por `sha256`. Conteúdo igual em todos é o critério; bytes de parquet não servem,
+porque o arquivo carrega metadados de escrita e não é byte-determinístico (medido
+em 2026-11-06). Dependem de rede: `01`, `02`, `05`, `09`. Dependem de download
+manual: `07` e, por ele, `08` e `11` na primeira vez. Rodam offline: `03`, `04`,
+`08`, `10`, `11`, `06` e `05 --offline` (reconstrói `pdad_populacao.csv` de
+`data/raw/pdad` sem tocar a API).
+
+```bash
+mkdir -p /tmp/replay && cd /tmp/replay
+git clone https://github.com/mtsanaissi/prova-dos-nove.git repo && cd repo
+ln -s /caminho/para/prova-dos-nove/data/raw data/raw
+```
 
 ### O que o reconhecimento já mostrou
 
@@ -212,17 +234,21 @@ sobre um universo restrito às escolas que ofertam fundamental/médio).
 ```text
 .
 ├── AGENTS.md               # contexto e convenções do projeto
+├── LICENSE                 # MIT; textos e dados derivados sob CC BY 4.0
 ├── REPORT.md               # relatório da fase de reconhecimento
 ├── SCHEMA.md               # dicionário de dados
-├── requirements.txt        # dependências
+├── requirements.txt        # dependências, pinadas
 ├── docs/
 │   ├── nome.md             # a origem do nome, contada para crianças
+│   ├── FASE-1.md           # contrato da página por escola (fase 1)
 │   ├── LIMITES.md          # registro de limites, suposições e riscos
 │   └── worklogs/           # registro técnico do que foi feito, por data
 ├── data/
 │   ├── raw/                # originais (fora do git) + MANIFEST.md (dentro)
 │   │   └── inep/inbox/     # onde o arquivo baixado no navegador é deixado
-│   └── interim/            # normalizados e respostas (fora do git)
+│   ├── interim/            # normalizados e respostas (fora do git)
+│   └── public/             # recorte mínimo que o build lê (dentro do git)
+├── site/                   # build estático (fora do git; ver docs/FASE-1.md)
 └── scripts/
     ├── _common.py             # download, hash, detecção de formato, MANIFEST
     ├── 01_inventory_seedf.py  # enumera o CKAN da SEEDF
@@ -230,11 +256,12 @@ sobre um universo restrito às escolas que ofertam fundamental/médio).
     ├── 03_profile_seedf.py    # perfila e converte para parquet
     ├── 04_crosswalk.py        # mede taxa de casamento entre arquivos
     ├── 05_external_sources.py # PDAD-A, INEP e malha territorial
-    ├── 06_analysis.py         # as seis perguntas, com número e arquivo
+    ├── 06_analysis.py         # as perguntas, com número, arquivo e procedência
     ├── 07_ingest_inep.py      # ingere o que veio pelo navegador
     ├── 08_profile_inep.py     # perfila e normaliza o que a INEP entrega
     ├── 09_download_malha.py   # malha das RAs (IDE/DF), só validação por atributo
-    └── 10_ingest_pdad.py      # microdados da PDAD-A: agregados por RA
+    ├── 10_ingest_pdad.py      # microdados da PDAD-A: agregados por RA
+    └── 11_ingest_censo.py     # recorte do DF dos microdados do Censo Escolar
 ```
 
 ## Como rodar
@@ -245,32 +272,35 @@ Python 3.12, ambiente criado com `uv`:
 uv venv .venv
 uv pip install -r requirements.txt
 
+# rede: catálogo, download e fontes externas
 .venv/bin/python scripts/01_inventory_seedf.py   # enumera o CKAN
 .venv/bin/python scripts/02_download_seedf.py    # baixa e registra no MANIFEST
-.venv/bin/python scripts/03_profile_seedf.py     # parquet + perfil de colunas
-.venv/bin/python scripts/04_crosswalk.py         # taxa de casamento das chaves
-.venv/bin/python scripts/05_external_sources.py  # PDAD-A e teste das demais fontes
-.venv/bin/python scripts/06_analysis.py          # números do REPORT.md
+.venv/bin/python scripts/05_external_sources.py  # PDAD-A, INEP e malha
+.venv/bin/python scripts/09_download_malha.py    # malha das RAs (IDE/DF)
 
-# microdados da PDAD-A (população 0–3, frequência por RA, fluxo RA → RA)
-.venv/bin/python scripts/10_ingest_pdad.py --check  # só lê e descreve
-.venv/bin/python scripts/10_ingest_pdad.py          # agregados em data/interim/pdad/
-```
-
-Depois da parte da SEEDF, a INEP:
-
-```bash
-# baixe no navegador e deixe os arquivos em data/raw/inep/inbox/
+# manual: baixe no navegador e deixe em data/raw/inep/inbox/
 .venv/bin/python scripts/07_ingest_inep.py --check   # o que falta, com URL
 .venv/bin/python scripts/07_ingest_inep.py           # hash, move, registra
 .venv/bin/python scripts/08_profile_inep.py          # perfila e normaliza
+
+# offline, a partir daqui
+.venv/bin/python scripts/11_ingest_censo.py          # Censo 2024–2025 por escola
+.venv/bin/python scripts/10_ingest_pdad.py           # agregados da PDAD-A por RA
+.venv/bin/python scripts/03_profile_seedf.py         # parquet + perfil de colunas
+.venv/bin/python scripts/04_crosswalk.py             # taxa de casamento das chaves
+.venv/bin/python scripts/06_analysis.py              # números do REPORT.md
 ```
 
+`06` é o último: lê o parquet do `11`, os agregados do `10` e o perfil do `03`.
+Ele grava `data/interim/q0_execucao.csv` com o estado de cada etapa e sai com
+código diferente de zero se alguma pulou; `--parcial` aceita o resultado
+incompleto e sai com zero.
+
 Todos os scripts são idempotentes e abrem com docstring dizendo entrada, saída e
-se podem ser reexecutados. `03`, `04` e `06` leem apenas `data/`; `01`, `02` e
-`05` acessam a rede, e `02` e `05` pulam o que já está baixado. Os dados não
-entram no git; o manifesto, com URL, data, tamanho e sha256 de cada arquivo,
-entra.
+se podem ser reexecutados. `03`, `04`, `06`, `08`, `10` e `11` leem apenas
+`data/`; `01`, `02`, `05` e `09` acessam a rede, e `02` e `05` pulam o que já
+está baixado. Os dados não entram no git; o manifesto, com URL, data, tamanho e
+sha256 de cada arquivo, entra.
 
 ## Contribuir
 
@@ -280,5 +310,24 @@ avise.
 
 ## Licença
 
-Código sob MIT; textos e dados derivados sob CC BY 4.0. A confirmar antes da
-primeira publicação.
+Código sob MIT (`LICENSE`), © 2026 Marcelo Anaissi. Textos e dados derivados
+sob CC BY 4.0, com atribuição ao projeto e às fontes citadas em cada número.
+
+Licença por fonte, como ela é declarada no catálogo — nenhuma foi inferida:
+
+| fonte | licença declarada | onde |
+|---|---|---|
+| SEEDF/CKAN, 12 conjuntos | CC BY (Creative Commons Atribuição) | `license_id=cc-by` |
+| SEEDF/CKAN, 5 conjuntos | ODbL (Open Data Commons Open Database License) | `license_id=odc-odbl` |
+| INEP | público, sem licença declarada no portal | — |
+| PDAD/IPEDF | não declarado | — |
+| IDE/DF (malha) | não declarado | — |
+
+Os 5 conjuntos ODbL são os de Ideb/SAEB por unidade e as listas de unidades com
+oferta (anos iniciais, finais, médio e educação infantil), mais a série de
+matrículas por modalidade. Política: **nenhum número publicado depende dos CSVs
+ODbL de Ideb e unidades** — eles entram só como diagnóstico interno (L-45). A
+série de matrículas por modalidade também é ODbL, e por isso a página publica
+matrícula pelo Censo da INEP (2024–2025): a série da SEEDF continua ingerida
+como diagnóstico e não sustenta número publicado.
+

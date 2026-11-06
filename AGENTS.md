@@ -40,7 +40,10 @@ veredito, não limite.
 - Scripts numbered by run order: `01_inventory_seedf.py`, `02_download_seedf.py`.
 - `data/raw/` is immutable. Normalized output goes to `data/interim/` as
   parquet.
-- `data/` never enters git; `data/raw/MANIFEST.md` does.
+- `data/` never enters git; `data/raw/MANIFEST.md` does. The one exception is
+  `data/public/`: the minimal per-school aggregate the site build reads (no raw
+  file, no microdata, no row that identifies a person), small enough to carry
+  the build in CI. Anything there is generated, versioned and declared here.
 - Every script runs from scratch with no undocumented manual step, and opens
   with a docstring naming input, output and whether it is idempotent.
 
@@ -82,12 +85,15 @@ and only when an analysis actually uses geometry.
 Download → `MANIFEST.md` (URL, date, bytes, sha256) → profile → `SCHEMA.md`
 (grain, key, types, nulls, years) → analysis → `REPORT.md` with sourced numbers.
 
-When a source blocks scripted download (`download.inep.gov.br`: connection reset
-from `urllib`/`curl` in this environment, HTTP 200 from the browser), the path is
-declared, not hidden: browser download → `data/raw/inep/inbox/` →
-`scripts/07_ingest_inep.py` (hash, MANIFEST, catalogue of what is missing) →
-`scripts/08_profile_inep.py` (profile and DF slice). Never imply that an
-automated download worked, and never register a file that was not verified.
+When a source blocks scripted download (`download.inep.gov.br`: incomplete TLS
+chain — the certificate is issued under RNP ICPEdu and `curl` without `-k` exits
+60, `openssl s_client` returns 21), the path is declared, not hidden: browser
+download or `curl -sk` → `data/raw/inep/inbox/` → `scripts/07_ingest_inep.py`
+(hash, MANIFEST, catalogue of what is missing) → `scripts/08_profile_inep.py`
+(profile and DF slice) → `scripts/11_ingest_censo.py` (Censo slice). Never imply
+that an automated download worked, and never register a file that was not
+verified: with `curl -sk` the file must still be checked against the MANIFEST
+sha256.
 
 ## Done
 
