@@ -151,6 +151,8 @@ anterior.
 | `2026-10-22_tx_rend_escolas_2025.zip` | INEP/Taxas de Rendimento | https://download.inep.gov.br/informacoes_estatisticas/indicadores_educacionais/2025/tx_rend_escolas_2025.zip | 2026-10-22 | 66870247 | `483335234fed7d3f1880d00eefb1f0e1d23ffc3807c1c7f6caf9795db63e0b92` | download manual pelo navegador; aprovação, reprovação e abandono por escola em todas as redes (a SEEDF só publica a rede estadual) |
 | `2026-10-22_TDI_2025_ESCOLAS.zip` | INEP/Distorção idade-série | https://download.inep.gov.br/informacoes_estatisticas/indicadores_educacionais/2025/TDI_2025_ESCOLAS.zip | 2026-10-22 | 34465795 | `352b1ce726bb33f56a0141e91e547919ef786b391c30708a21060f8a4af9a858` | download manual pelo navegador; distorção idade-série por escola em todas as redes |
 | `2026-10-22_tnr_escolas_2025.zip` | INEP/Taxa de não-resposta | https://download.inep.gov.br/informacoes_estatisticas/indicadores_educacionais/2025/tnr_escolas_2025.zip | 2026-10-22 | 30600051 | `35d6a8c9ad0994b04deae8d1547e3fcc54a261f206ffa334ba51f622d3bb6405` | download manual pelo navegador; percentual de alunos sem informação de rendimento/movimento por escola, todas as redes; não separa não participação de resultado suprimido (ver SCHEMA.md e q12) |
+| `2026-10-23_microdados_censo_escolar_2024.zip` | INEP/Censo Escolar | https://download.inep.gov.br/microdados/microdados_censo_escolar_2024.zip | 2026-10-23 | 33829396 | `ae29d81d45ddecef59e11eda39788cbfd30dfa1cc71be9d29f23051fc2d640db` | download manual pelo navegador; matrícula por escola × etapa em todas as redes: o peso que falta às taxas por escola e a conferência valor a valor da série de matrículas da SEEDF em 2024; URL canônica do diretório de microdados da INEP, não verificável deste ambiente (conexão resetada) |
+| `2026-10-23_microdados_censo_escolar_2025_.zip` | INEP/Censo Escolar | https://download.inep.gov.br/microdados/microdados_censo_escolar_2025_.zip | 2026-10-23 | 537217189 | `ad2c389160be5cf6b8e32257677e9b5657f01d10a342355ad9757bfecd2fc90a` | download manual pelo navegador; matrícula de 2025 por escola × etapa, para ponderar TDI, TNR, fluxo e Ideb do mesmo ano, e as faixas de idade nas duas datas de referência (31/03 e maio); URL canônica do diretório de microdados da INEP, não verificável deste ambiente (conexão resetada) |
 
 ## Correções
 
@@ -158,6 +160,13 @@ Registro de metadados errados neste manifesto. O conteúdo do arquivo não muda:
 `sha256` e bytes continuam valendo; o que se corrige é o que o manifesto diz
 sobre ele.
 
+- **2026-11-06 — duas linhas fora da tabela.** As linhas de
+  `2026-10-23_microdados_censo_escolar_2024.zip` e `..._2025_.zip` estavam
+  dentro de `## Correções`: `_common.append_manifest` inseria antes de
+  `## Regras`, não depois da última linha da tabela, e a tabela terminava antes
+  delas. As duas linhas voltaram para o fim da tabela; bytes e `sha256` não
+  mudaram. O `append_manifest` passou a inserir depois da última linha que começa
+  com `` | ` `` e recusa o arquivo se não houver tabela.
 - **2026-10-23 — extensão de três arquivos da PDAD-A 2024.** As linhas de
   `2026-10-22_pdad_a_2024_base_de_morador.pdf`,
   `..._base_de_domicilios.pdf` e `..._dicionario_de_dados.pdf` têm extensão
@@ -168,8 +177,6 @@ sobre ele.
   e 473.417; os `sha256` não mudaram. O conteúdo é detectado pelos primeiros
   bytes em `10_ingest_pdad.py`; o `05` passou a derivar a extensão do sufixo da
   URL, e os nomes antigos continuam aceitos para não gerar download duplicado.
-| `2026-10-23_microdados_censo_escolar_2024.zip` | INEP/Censo Escolar | https://download.inep.gov.br/microdados/microdados_censo_escolar_2024.zip | 2026-10-23 | 33829396 | `ae29d81d45ddecef59e11eda39788cbfd30dfa1cc71be9d29f23051fc2d640db` | download manual pelo navegador; matrícula por escola × etapa em todas as redes: o peso que falta às taxas por escola e a conferência valor a valor da série de matrículas da SEEDF em 2024; URL canônica do diretório de microdados da INEP, não verificável deste ambiente (conexão resetada) |
-| `2026-10-23_microdados_censo_escolar_2025_.zip` | INEP/Censo Escolar | https://download.inep.gov.br/microdados/microdados_censo_escolar_2025_.zip | 2026-10-23 | 537217189 | `ad2c389160be5cf6b8e32257677e9b5657f01d10a342355ad9757bfecd2fc90a` | download manual pelo navegador; matrícula de 2025 por escola × etapa, para ponderar TDI, TNR, fluxo e Ideb do mesmo ano, e as faixas de idade nas duas datas de referência (31/03 e maio); URL canônica do diretório de microdados da INEP, não verificável deste ambiente (conexão resetada) |
 
 ## Regras
 

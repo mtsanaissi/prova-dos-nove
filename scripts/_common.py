@@ -135,16 +135,16 @@ def append_manifest(rows: list[dict]) -> None:
     if not new_lines:
         return
     lines = text.splitlines()
-    idx = None
+    # A linha nova entra imediatamente depois da última linha da tabela. Inserir
+    # "antes de ## Regras" punha a linha depois de ## Correções — foi assim que
+    # as duas linhas do Censo caíram dentro daquela seção (ver MANIFEST.md,
+    # Correções, 2026-11-06).
+    ultima_tabela = None
     for i, line in enumerate(lines):
-        if line.startswith("## Regras"):
-            idx = i
-            break
-    if idx is None:
-        raise RuntimeError("MANIFEST.md sem seção '## Regras'")
-    # insere antes da linha em branco que precede '## Regras'
-    insert_at = idx
-    while insert_at > 0 and lines[insert_at - 1].strip() == "":
-        insert_at -= 1
+        if line.startswith("| `"):
+            ultima_tabela = i
+    if ultima_tabela is None:
+        raise RuntimeError("MANIFEST.md sem tabela de arquivos (nenhuma linha '| `')")
+    insert_at = ultima_tabela + 1
     lines[insert_at:insert_at] = new_lines
     MANIFEST.write_text("\n".join(lines) + "\n", encoding="utf-8")
