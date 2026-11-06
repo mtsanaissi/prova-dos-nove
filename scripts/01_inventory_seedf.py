@@ -51,6 +51,10 @@ def main() -> None:
                 "bytes_total": sum(int(r.get("size") or 0) for r in rs),
                 "anos_no_nome": ";".join(anos),
                 "tem_dicionario": "sim" if tem_dicionario else "nao",
+                # licença declarada no package_show: entra como está, sem inferir.
+                "licenca_id": d.get("license_id") or "",
+                "licenca_titulo": d.get("license_title") or "",
+                "licenca_url": d.get("license_url") or "",
             }
         )
         for r in rs:
@@ -64,6 +68,10 @@ def main() -> None:
                     "arquivo": (r.get("url") or "").split("/download/")[-1],
                     "anos_no_nome": anos_do_recurso(r.get("name", ""), r.get("title") or ""),
                     "modificado_em": (r.get("last_modified") or r.get("created") or "")[:10],
+                    # a licença é do conjunto, repetida no recurso para o join ser direto
+                    "licenca_id": d.get("license_id") or "",
+                    "licenca_titulo": d.get("license_title") or "",
+                    "licenca_url": d.get("license_url") or "",
                 }
             )
 
