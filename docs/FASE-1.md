@@ -88,6 +88,29 @@ Regras que valem para todos os blocos:
 - Cada número carrega, no JSON de procedência (§5), fonte, arquivo, ano, cálculo,
   n e ids.
 
+### 2.1 A página de entrada (`index.html`)
+
+A porta do site (decisão do mantenedor, 2026-11-06). Duas formas de chegar, na
+mesma página:
+
+- **busca por nome**: campo que filtra enquanto se digita, sem servidor, lendo
+  `indice.json` no navegador;
+- **lista por Região Administrativa**: as 35 RAs em ordem alfabética, e dentro de
+  cada uma as escolas em ordem alfabética, com nome e rede (estadual, privada
+  conveniada, privada não conveniada, federal).
+
+Regras:
+
+- O índice **não publica número**: nem contagem de escolas por RA, nem média,
+  nem total. Número é coisa da página da escola, onde a procedência aparece
+  número a número. Se a contagem for pedida depois, entra com bloco de fonte
+  próprio.
+- Nenhuma ordenação por indicador; a ordem é alfabética em todos os níveis.
+- Sem JavaScript a lista por RA continua legível: o HTML é gerado com as 1.291
+  escolas; o JavaScript só filtra.
+- `indice.json` é `[{co_entidade, nome, ra, rede}]`, ordenado por `nome`, e é o
+  único insumo da busca.
+
 ## 3. Contrato de dados
 
 Quatro estados, três símbolos na tela. Nenhum vira `NaN` na saída e nenhum é
@@ -193,7 +216,7 @@ Regras do export, todas verificáveis:
 
 ```text
 site/
-├── index.html                     # busca por nome ou RA; lista em ordem alfabética
+├── index.html                     # busca por nome + lista por RA, sem número (§2.1)
 ├── indice.json                    # [{co_entidade, nome, ra, rede}] — alimenta a busca
 ├── estilo.css                     # sem framework
 ├── creditos.html                  # licença por fonte e titular (critério 6)
@@ -349,7 +372,8 @@ python scripts/12_build_site.py --public data/public --out site \
 ```
 
 **2. Sem ranking.** Nenhuma página ordena escolas por indicador, nenhuma exibe
-faixa p10–p90 ou mediana da rede, e `indice.json` está em ordem alfabética.
+faixa p10–p90 ou mediana da rede, `indice.json` está em ordem alfabética e o
+`index.html` não publica número nenhum (§2.1).
 
 ```bash
 grep -c "p10\|p90\|mediana da rede" site/*.html    # 0 em todas
