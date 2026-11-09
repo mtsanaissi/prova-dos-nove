@@ -19,7 +19,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - run: python scripts/12_build_site.py --public data/public --out site
+      # --check constrói site/ e roda os critérios 1–4 e 6, a idempotência do 5
+      # e os casos de limite. A metade do critério 5 que roda o 06 é local:
+      # data/interim/ está fora do git (.gitignore) e o CI não tem as etapas.
+      - run: python scripts/12_build_site.py --public data/public --out site --data-build 2026-11-06 --check
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

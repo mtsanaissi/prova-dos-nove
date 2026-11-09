@@ -18,6 +18,7 @@ Uso:
     python scripts/12_build_site.py --public data/public --out site \
         --data-build 2026-11-06 --limiar-n 30
     python scripts/12_build_site.py --public data/public --out site --check
+    python scripts/12_build_site.py --public data/public --out site --check-casos
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ import hashlib
 import html
 import json
 import re
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -85,12 +87,21 @@ FRASE_IDEB_PUBLICA = (
     "sem Ideb em 2025: a INEP não publica quando há menos de 10 alunos na prova "
     "ou participação abaixo de 80%, e não informa qual foi o caso"
 )
+FRASE_CENSO_2024_SEM_LINHA = "a escola não consta do Censo de 2024"
 FRASE_MATRICULA_2024 = "matrícula não declarada no Censo de 2024"
+FRASE_MATRICULA_2025 = "matrícula não declarada no Censo de 2025"
 FRASE_SEM_INDICADOR = "esta escola não tem Ideb nem taxas publicadas em 2025"
 FRASE_INFRA_NAO_APLICAVEL = (
     "a infraestrutura é publicada para as escolas que oferecem ensino fundamental ou médio"
 )
 FRASE_N_PEQUENA = "nesta etapa — o indicador não é publicado quando a turma é pequena"
+
+# Famílias cujo n é contagem de alunos (e não a própria escola). Só nelas o
+# JSON admite n = null e o campo n_referencia.
+FAMILIAS_N_ALUNOS = {"ideb", "fluxo", "tdi", "tnr"}
+SLUG_POR_ETAPA_LABEL = {
+    label: ETAPA_SLUG[codigo] for codigo, label, _ in ETAPAS
+}
 
 
 class BuildError(Exception):
@@ -118,15 +129,25 @@ def _registros_por_familia(procedencia: dict) -> dict[str, dict]:
     if not isinstance(registros, list) or not registros:
         raise BuildError("procedencia.json sem a lista 'registros'")
     mapa = {}
+    licencas_por_fonte: dict[str, tuple[str, str | None]] = {}
     for registro in registros:
         familia = registro.get("familia")
         if not familia or familia in mapa:
             raise BuildError(f"procedencia.json com família ausente ou duplicada: {familia!r}")
-        for campo in ("fonte", "arquivo", "calculo"):
+        for campo in ("fonte", "arquivo", "calculo", "licenca"):
             if not registro.get(campo):
                 raise BuildError(f"registro {familia!r} sem {campo}")
+        if "licenca_url" not in registro:
+            raise BuildError(f"registro {familia!r} sem licenca_url (pode ser null)")
         if not registro.get("limites"):
             raise BuildError(f"registro {familia!r} sem limites")
+        chave = (registro["licenca"], registro["licenca_url"])
+        anterior = licencas_por_fonte.setdefault(registro["fonte"], chave)
+        if anterior != chave:
+            raise BuildError(
+                f"famílias da fonte {registro['fonte']!r} divergem em licença: "
+                f"{anterior!r} × {chave!r}"
+            )
         mapa[familia] = registro
     return mapa
 
@@ -157,6 +178,7 @@ def carregar_dados(public: Path) -> dict:
     escolas_df = pd.read_parquet(public / "escolas.parquet")
     for coluna in (
         "co_entidade", "nome", "ra", "rede", "rede_cadastro",
+        "censo_2024_presente",
         "oferta_inf_cre", "oferta_inf_pre", "oferta_fund_ai", "oferta_fund_af",
         "oferta_med", "oferta_eja", "oferta_esp", "oferta_prof",
         "mat_inf_cre_2024", "mat_fund_ai_2024", "mat_fund_af_2024", "mat_med_2024",
@@ -174,17 +196,30 @@ def carregar_dados(public: Path) -> dict:
             co = co.zfill(8)
         if r["rede"] not in REDES:
             raise BuildError(f"escola {co} com rede fora do contrato: {r['rede']!r}")
+        if pd.isna(r["censo_2024_presente"]):
+            raise BuildError(f"escola {co} sem censo_2024_presente")
         escola = {
             "co": co,
             "nome": str(r["nome"]).strip(),
             "ra": str(r["ra"]).strip(),
             "rede": r["rede"],
             "rede_cadastro": str(r["rede_cadastro"]).strip(),
+            "censo_2024_presente": bool(r["censo_2024_presente"]),
         }
         for coluna, _ in OFERTAS:
             escola[coluna] = int(r[coluna]) if not pd.isna(r[coluna]) else 0
         for (etapa, ano), coluna in MAT_COLS.items():
             escola[f"mat_{etapa}_{ano}"] = _int_ou_none(r[coluna])
+        if not escola["censo_2024_presente"]:
+            preenchidas = [
+                etapa for etapa in ("CRE", "AI", "AF", "EM")
+                if escola.get(f"mat_{etapa}_2024") is not None
+            ]
+            if preenchidas:
+                raise BuildError(
+                    f"escola {co} sem linha no Censo 2024 com matrícula de 2024: "
+                    + ", ".join(preenchidas)
+                )
         escolas.append(escola)
     escolas.sort(key=lambda e: e["co"])
 
@@ -233,6 +268,18 @@ def carregar_dados(public: Path) -> dict:
             raise BuildError(f"infraestrutura {co}/{item} com valor fora de 0/1: {valor!r}")
         infra[(co, item)] = {"valor": valor, "estado": estado, "ano": str(r["ano"])}
 
+    execucao = procedencia.get("execucao") or {}
+    etapas_puladas = execucao.get("etapas_puladas") if isinstance(execucao, dict) else None
+    if etapas_puladas is None:
+        etapas_puladas = []
+    if not isinstance(etapas_puladas, list):
+        raise BuildError("procedencia.json com execucao.etapas_puladas fora de lista")
+    if etapas_puladas:
+        print(
+            "AVISO: o insumo público foi exportado com --parcial e tem etapa(s) "
+            "pulada(s): " + ", ".join(str(e) for e in etapas_puladas)
+        )
+
     return {
         "escolas": escolas,
         "por_co": por_co,
@@ -241,6 +288,7 @@ def carregar_dados(public: Path) -> dict:
         "procedencia": procedencia,
         "registros": _registros_por_familia(procedencia),
         "hashes": hashes,
+        "etapas_puladas": [str(e) for e in etapas_puladas],
     }
 
 
@@ -329,6 +377,7 @@ class PaginaEscola:
         n: int | None,
         texto: str,
         limites: list[str] | None = None,
+        n_referencia: str | None = None,
     ) -> str:
         registro = self.d["registros"][familia]
         if id in self.por_id:
@@ -346,39 +395,73 @@ class PaginaEscola:
             "fonte": registro["fonte"],
             "arquivo": registro["arquivo"],
             "calculo": registro["calculo"],
-            "n": int(n) if n is not None else 1,
+            "n": int(n) if n is not None else None,
             "limites": list(limites if limites is not None else registro["limites"]),
         }
+        if n_referencia is not None:
+            registro_numero["n_referencia"] = str(n_referencia)
         self.por_id[id] = registro_numero
         self.numeros.append(registro_numero)
         return f'<span class="num" data-numero="{html.escape(id)}" data-estado="{estado}">{texto}</span>'
 
-    def mat_span(self, etapa: str, ano: str) -> str:
-        chave = (etapa, str(ano))
+    def mat_span(self, etapa: str, ano: str, familia: str = "matricula") -> str:
+        """Renderiza a matrícula da etapa/ano e registra o estado no JSON.
+
+        A frase da ausência não sai daqui: o bloco a renderiza uma vez, com
+        `mat_ausencias`, porque o motivo depende da presença da escola no Censo
+        de 2024 e do ano.
+        """
+        chave = (familia, etapa, str(ano))
         if chave in self.mat_cache:
             return self.mat_cache[chave]
         valor = self.e.get(f"mat_{etapa}_{ano}")
-        id_numero = f"matricula-{slug_etapa(etapa)}-{ano}"
-        label = MAT_LABEL[etapa]
+        if familia == "creche":
+            id_numero = f"creche-{ano}"
+            bloco = "creche"
+            etapa_label = "creche"
+        else:
+            id_numero = f"matricula-{slug_etapa(etapa)}-{ano}"
+            bloco = "matricula"
+            etapa_label = MAT_LABEL[etapa]
         if valor is None:
             html_num = self._add(
-                id=id_numero, familia="matricula", bloco="matricula", etapa=label,
+                id=id_numero, familia=familia, bloco=bloco, etapa=etapa_label,
                 ano=ano, valor=None, estado="ausente", n=1, texto="-",
             )
         elif int(valor) == 0:
             html_num = self._add(
-                id=id_numero, familia="matricula", bloco="matricula", etapa=label,
+                id=id_numero, familia=familia, bloco=bloco, etapa=etapa_label,
                 ano=ano, valor=0, estado="zero", n=1, texto="0",
             )
         else:
             html_num = self._add(
-                id=id_numero, familia="matricula", bloco="matricula", etapa=label,
+                id=id_numero, familia=familia, bloco=bloco, etapa=etapa_label,
                 ano=ano, valor=int(valor), estado="valor", n=1, texto=fmt_int(valor),
             )
         self.mat_cache[chave] = html_num
         return html_num
 
-    def rate_span(self, familia: str, nome: str, etapa: str, n: int, reg: dict) -> str:
+    def mat_ausencias(self, familia: str, anos: tuple[str, ...], etapas: list[str]) -> str:
+        """Frases de ausência de matrícula, uma por motivo e por bloco."""
+        partes = []
+        for ano in anos:
+            faltantes = [
+                etapa for etapa in etapas if self.e.get(f"mat_{etapa}_{ano}") is None
+            ]
+            if not faltantes:
+                continue
+            if str(ano) == "2024":
+                if not self.e["censo_2024_presente"]:
+                    partes.append(
+                        self.ausencia(FRASE_CENSO_2024_SEM_LINHA, "L-63", "censo")
+                    )
+                else:
+                    partes.append(self.ausencia(FRASE_MATRICULA_2024, "L-28", "censo"))
+            else:
+                partes.append(self.ausencia(FRASE_MATRICULA_2025, "L-28", "censo"))
+        return "".join(partes)
+
+    def rate_span(self, familia: str, nome: str, etapa: str, n: int | None, reg: dict) -> str:
         valor = reg.get("valor")
         estado = str(reg.get("estado", "ausente"))
         if estado == "nao_aplicavel":
@@ -395,20 +478,23 @@ class PaginaEscola:
             ano="2025", valor=valor, estado=estado, n=n, texto=texto,
         )
 
-    def ideb_cell(self, etapa: str, ano: str, n: int) -> str:
+    def ideb_cell(self, etapa: str, ano: str, n: int | None) -> str:
         reg = indicador(self.d, self.e["co"], etapa, "ideb_observado", ano)
+        n_referencia = "2025" if str(ano) != "2025" else None
         if reg["estado"] == "valor" and reg["valor"] is not None:
             valor = float(reg["valor"])
             estado = "zero" if valor == 0 else "valor"
             texto = fmt_dec(valor)
             return self._add(
                 id=f"ideb-{slug_etapa(etapa)}-{ano}", familia="ideb", bloco="ideb",
-                etapa=ETAPA_LABEL[etapa], ano=ano, valor=valor, estado=estado, n=n, texto=texto,
+                etapa=ETAPA_LABEL[etapa], ano=ano, valor=valor, estado=estado, n=n,
+                texto=texto, n_referencia=n_referencia,
             )
         if str(ano) == "2025":
             return self._add(
                 id=f"ideb-{slug_etapa(etapa)}-2025", familia="ideb", bloco="ideb",
-                etapa=ETAPA_LABEL[etapa], ano="2025", valor=None, estado="ausente", n=n, texto="-",
+                etapa=ETAPA_LABEL[etapa], ano="2025", valor=None, estado="ausente", n=n,
+                texto="-",
             )
         return '<span class="simbolo" data-estado="ausente">-</span>'
 
@@ -504,21 +590,13 @@ class PaginaEscola:
         partes.append(
             '<table class="tabela"><thead><tr><th>Etapa</th><th>2024</th><th>2025</th></tr></thead><tbody>'
         )
-        faltam_2024, faltam_2025 = [], []
         for etapa, rotulo in (("CRE", "Creche"), ("AI", "Anos iniciais"), ("AF", "Anos finais"), ("EM", "Ensino médio")):
-            if e.get(f"mat_{etapa}_2024") is None:
-                faltam_2024.append(rotulo)
-            if e.get(f"mat_{etapa}_2025") is None:
-                faltam_2025.append(rotulo)
             partes.append(
                 f"<tr><td>{rotulo}</td><td>{self.mat_span(etapa, '2024')}</td>"
                 f"<td>{self.mat_span(etapa, '2025')}</td></tr>"
             )
         partes.append("</tbody></table>")
-        if faltam_2024:
-            partes.append(self.ausencia(FRASE_MATRICULA_2024, "L-28", "censo"))
-        if faltam_2025:
-            partes.append(self.ausencia("matrícula não declarada no Censo de 2025", "L-28", "censo"))
+        partes.append(self.mat_ausencias("matricula", ("2024", "2025"), ["CRE", "AI", "AF", "EM"]))
         partes.append(self.fonte("matricula"))
         partes.append("</section>")
 
@@ -534,12 +612,14 @@ class PaginaEscola:
                 partes.append(self._artigo("ideb", etapa, None, "nao_ofertada", corpo))
                 continue
             n = e.get(f"mat_{etapa}_2025")
-            n_exibir = n if n is not None else 1
             ano_2025 = indicador(self.d, co, etapa, "ideb_observado")
             situacao = "publicado" if ano_2025["estado"] == "valor" else "ausente"
             corpo = [f"<h3>{titulo_etapa(rotulo)}</h3>"]
             if n is None:
-                corpo.append('<p class="n">n = - alunos em 2025 (matrícula da etapa)</p>')
+                corpo.append(
+                    f'<p class="n">n = {self.mat_span(etapa, "2025")} '
+                    "em 2025 (matrícula da etapa)</p>"
+                )
             else:
                 corpo.append(
                     f'<p class="n">n = {self.mat_span(etapa, "2025")} '
@@ -547,7 +627,7 @@ class PaginaEscola:
                 )
             corpo.append('<table class="tabela tabela-estreita"><thead><tr><th>Ano</th><th>Ideb</th></tr></thead><tbody>')
             for ano in ANOS_IDEB_ETAPA[etapa]:
-                corpo.append(f"<tr><td>{ano}</td><td>{self.ideb_cell(etapa, ano, n_exibir)}</td></tr>")
+                corpo.append(f"<tr><td>{ano}</td><td>{self.ideb_cell(etapa, ano, n)}</td></tr>")
             corpo.append("</tbody></table>")
             if ano_2025["estado"] != "valor":
                 if e["rede"].startswith("privada"):
@@ -569,7 +649,15 @@ class PaginaEscola:
                 partes.append(self._artigo("fluxo", etapa, None, "nao_ofertada", corpo))
                 continue
             n = e.get(f"mat_{etapa}_2025")
-            if n is not None and n < self.limiar:
+            if n is None:
+                corpo = (
+                    f"<h3>{titulo_etapa(rotulo)}</h3>"
+                    f'<p class="n">n = {self.mat_span(etapa, "2025")} em 2025</p>'
+                    + self.ausencia(FRASE_MATRICULA_2025, "L-28", "censo")
+                )
+                partes.append(self._artigo("fluxo", etapa, None, "ausente", corpo))
+                continue
+            if n < self.limiar:
                 corpo = f"<h3>{titulo_etapa(rotulo)}</h3>" + self.pequena(etapa, n)
                 partes.append(self._artigo("fluxo", etapa, n, "suprimido", corpo))
                 continue
@@ -580,7 +668,7 @@ class PaginaEscola:
                 if reg["estado"] in ("valor", "zero"):
                     tem_valor = True
                 linhas.append(
-                    f"<tr><td>{label}</td><td>{self.rate_span('fluxo', nome, etapa, n or 1, reg)}</td></tr>"
+                    f"<tr><td>{label}</td><td>{self.rate_span('fluxo', nome, etapa, n, reg)}</td></tr>"
                 )
             corpo = f"<h3>{titulo_etapa(rotulo)}</h3>"
             corpo += f'<p class="n">n = {self.mat_span(etapa, "2025")} {palavra_aluno(n)} em 2025</p>'
@@ -601,7 +689,15 @@ class PaginaEscola:
                 partes.append(self._artigo("tdi", etapa, None, "nao_ofertada", corpo))
                 continue
             n = e.get(f"mat_{etapa}_2025")
-            if n is not None and n < self.limiar:
+            if n is None:
+                corpo = (
+                    f"<h3>{titulo_etapa(rotulo)}</h3>"
+                    f'<p class="n">n = {self.mat_span(etapa, "2025")} em 2025</p>'
+                    + self.ausencia(FRASE_MATRICULA_2025, "L-28", "censo")
+                )
+                partes.append(self._artigo("tdi", etapa, None, "ausente", corpo))
+                continue
+            if n < self.limiar:
                 corpo = f"<h3>{titulo_etapa(rotulo)}</h3>" + self.pequena(etapa, n)
                 partes.append(self._artigo("tdi", etapa, n, "suprimido", corpo))
                 continue
@@ -610,7 +706,7 @@ class PaginaEscola:
                 f"<h3>{titulo_etapa(rotulo)}</h3>"
                 f'<p class="n">n = {self.mat_span(etapa, "2025")} {palavra_aluno(n)} em 2025</p>'
                 '<table class="tabela"><thead><tr><th>Indicador</th><th>2025</th></tr></thead><tbody>'
-                f"<tr><td>Distorção idade-série</td><td>{self.rate_span('tdi', 'tdi', etapa, n or 1, reg)}</td></tr>"
+                f"<tr><td>Distorção idade-série</td><td>{self.rate_span('tdi', 'tdi', etapa, n, reg)}</td></tr>"
                 "</tbody></table>"
             )
             partes.append(self._artigo("tdi", etapa, n, "publicado" if reg["estado"] in ("valor", "zero") else "ausente", corpo))
@@ -628,7 +724,15 @@ class PaginaEscola:
                 partes.append(self._artigo("tnr", etapa, None, "nao_ofertada", corpo))
                 continue
             n = e.get(f"mat_{etapa}_2025")
-            if n is not None and n < self.limiar:
+            if n is None:
+                corpo = (
+                    f"<h3>{titulo_etapa(rotulo)}</h3>"
+                    f'<p class="n">n = {self.mat_span(etapa, "2025")} em 2025</p>'
+                    + self.ausencia(FRASE_MATRICULA_2025, "L-28", "censo")
+                )
+                partes.append(self._artigo("tnr", etapa, None, "ausente", corpo))
+                continue
+            if n < self.limiar:
                 corpo = f"<h3>{titulo_etapa(rotulo)}</h3>" + self.pequena(etapa, n)
                 partes.append(self._artigo("tnr", etapa, n, "suprimido", corpo))
                 continue
@@ -637,7 +741,7 @@ class PaginaEscola:
                 f"<h3>{titulo_etapa(rotulo)}</h3>"
                 f'<p class="n">n = {self.mat_span(etapa, "2025")} {palavra_aluno(n)} em 2025</p>'
                 '<table class="tabela"><thead><tr><th>Indicador</th><th>2025</th></tr></thead><tbody>'
-                f"<tr><td>Taxa de não-resposta</td><td>{self.rate_span('tnr', 'tnr', etapa, n or 1, reg)}</td></tr>"
+                f"<tr><td>Taxa de não-resposta</td><td>{self.rate_span('tnr', 'tnr', etapa, n, reg)}</td></tr>"
                 "</tbody></table>"
             )
             partes.append(self._artigo("tnr", etapa, n, "publicado" if reg["estado"] in ("valor", "zero") else "ausente", corpo))
@@ -684,29 +788,12 @@ class PaginaEscola:
             partes.append('<section class="bloco" id="creche">')
             partes.append(self._cabecalho_bloco("Creche da escola"))
             partes.append('<table class="tabela tabela-estreita"><thead><tr><th>Ano</th><th>Matrícula em creche</th></tr></thead><tbody>')
-            faltam = False
             for ano in ("2024", "2025"):
-                valor = e.get(f"mat_CRE_{ano}")
-                if valor is None:
-                    faltam = True
-                    celula = self._add(
-                        id=f"creche-{ano}", familia="creche", bloco="creche", etapa="creche",
-                        ano=ano, valor=None, estado="ausente", n=1, texto="-",
-                    )
-                elif int(valor) == 0:
-                    celula = self._add(
-                        id=f"creche-{ano}", familia="creche", bloco="creche", etapa="creche",
-                        ano=ano, valor=0, estado="zero", n=1, texto="0",
-                    )
-                else:
-                    celula = self._add(
-                        id=f"creche-{ano}", familia="creche", bloco="creche", etapa="creche",
-                        ano=ano, valor=int(valor), estado="valor", n=1, texto=fmt_int(valor),
-                    )
-                partes.append(f"<tr><td>{ano}</td><td>{celula}</td></tr>")
+                partes.append(
+                    f"<tr><td>{ano}</td><td>{self.mat_span('CRE', ano, 'creche')}</td></tr>"
+                )
             partes.append("</tbody></table>")
-            if faltam:
-                partes.append(self.ausencia(FRASE_MATRICULA_2024, "L-28", "censo"))
+            partes.append(self.mat_ausencias("creche", ("2024", "2025"), ["CRE"]))
             partes.append(self.fonte("creche"))
             partes.append("</section>")
 
@@ -1077,14 +1164,24 @@ distorção e o fluxo, é a mesma coorte do indicador. Para o Ideb, é uma
 aproximação: a coorte que fez o Saeb não é a matrícula inteira (L-21).</p>
 <p>A matrícula da página vem do Censo da INEP, não da série de matrículas por
 modalidade da SEEDF (L-62). Em 2024, célula vazia no Censo é matrícula não
-declarada, não zero (L-28).</p>
+declarada, não zero (L-28); escola sem linha em 2024 é outra ausência (L-63).</p>
+<p>No JSON de procedência, <code>n</code> pode ser <code>null</code> quando a
+matrícula que serviria de denominador não existe. Quando o <code>n</code> é uma
+contagem de alunos de outro ano, o campo <code>n_referencia</code> diz de que
+ano é essa matrícula — hoje, o Ideb de 2005–2023 usa a matrícula de 2025.</p>
 </section>
 
 <section class="bloco" id="censo">
 <h2>Matrícula não declarada</h2>
-<p>Quando o Censo de 2024 não tem a matrícula da escola, a página mostra
-<strong>-</strong> e diz “matrícula não declarada no Censo de 2024”. O motivo da
-célula vazia não é informado pela fonte (L-28).</p>
+<p>Quando a escola de 2025 não tem linha no Censo de 2024, a página mostra
+<strong>-</strong> e diz “a escola não consta do Censo de 2024” (L-63). A
+ausência de linha não diz se a escola não existia, se mudou de código ou se
+ficou fora da coleta; a fonte não estabelece a causa.</p>
+<p>Quando a escola tem linha no Censo de 2024 mas a célula de matrícula está
+vazia, a página mostra <strong>-</strong> e diz “matrícula não declarada no
+Censo de 2024”. O motivo da célula vazia também não é informado pela fonte
+(L-28). Em 2025, a célula vazia é lida como “matrícula não declarada no Censo de
+2025” (L-28).</p>
 </section>
 
 <section class="bloco" id="infraestrutura">
@@ -1107,19 +1204,28 @@ status, está em
 
 
 def pagina_creditos(dados: dict, data_build: str, limiar: int) -> str:
-    fontes = sorted({r["fonte"] for r in dados["registros"].values()})
+    por_fonte: dict[str, tuple[str, str | None]] = {}
+    for registro in dados["registros"].values():
+        fonte = registro["fonte"]
+        chave = (registro["licenca"], registro.get("licenca_url"))
+        anterior = por_fonte.setdefault(fonte, chave)
+        if anterior != chave:
+            raise BuildError(
+                f"famílias da fonte {fonte!r} divergem em licença: {anterior!r} × {chave!r}"
+            )
 
-    def licenca(fonte: str) -> str:
-        if fonte.startswith("SEEDF"):
-            return "CC BY (Creative Commons Atribuição)"
-        if fonte.startswith("INEP"):
-            return "público, sem licença declarada no portal"
-        return "não declarada"
-
-    linhas = "".join(
-        f"<tr><td>{html.escape(fonte)}</td><td>{html.escape(licenca(fonte))}</td></tr>"
-        for fonte in fontes
-    )
+    linhas = []
+    for fonte in sorted(por_fonte):
+        licenca, url = por_fonte[fonte]
+        if url:
+            declaracao = f'<a href="{html.escape(url, quote=True)}">{html.escape(url)}</a>'
+        else:
+            declaracao = "—"
+        linhas.append(
+            f"<tr><td>{html.escape(fonte)}</td><td>{html.escape(licenca)}</td>"
+            f"<td>{declaracao}</td></tr>"
+        )
+    linhas = "".join(linhas)
     corpo = f"""
 <main>
 <h1>Créditos e licenças</h1>
@@ -1138,7 +1244,7 @@ licença MIT está no arquivo
 <h2>Licença por fonte</h2>
 <p>Licença como declarada no catálogo de cada fonte; nenhuma foi inferida.</p>
 <table class="tabela">
-<thead><tr><th>Fonte</th><th>Licença declarada</th></tr></thead>
+<thead><tr><th>Fonte</th><th>Licença declarada</th><th>Declaração</th></tr></thead>
 <tbody>{linhas}</tbody>
 </table>
 <p>A série de matrículas por modalidade da SEEDF não é usada em nenhum número
@@ -1275,8 +1381,31 @@ def check_procedencia(site: Path, dados: dict, data_build: str) -> str:
             for campo in ("fonte", "arquivo", "ano", "calculo", "estado"):
                 if not numero.get(campo):
                     raise BuildError(f"{escola['co']}: {identificador} sem {campo}")
-            if not isinstance(numero.get("n"), int):
-                raise BuildError(f"{escola['co']}: {identificador} sem n inteiro")
+            n = numero.get("n")
+            if not (n is None or isinstance(n, int)):
+                raise BuildError(f"{escola['co']}: {identificador} sem n inteiro ou null")
+            if n is None:
+                if numero.get("bloco") not in FAMILIAS_N_ALUNOS:
+                    raise BuildError(
+                        f"{escola['co']}: {identificador} com n null fora de família de alunos"
+                    )
+                # Ideb com valor e denominador ausente continua sendo valor; as
+                # taxas (fluxo, TDI, TNR) são suprimidas e ficam ausentes.
+                if numero["bloco"] == "ideb":
+                    estados_n_null = ("valor", "zero", "ausente")
+                else:
+                    estados_n_null = ("ausente", "nao_aplicavel")
+                if numero["estado"] not in estados_n_null:
+                    raise BuildError(
+                        f"{escola['co']}: {identificador} com n null e estado {numero['estado']}"
+                    )
+                slug = SLUG_POR_ETAPA_LABEL.get(numero.get("etapa"))
+                if slug is None or (
+                    f'data-numero="matricula-{slug}-2025" data-estado="ausente"' not in markup
+                ):
+                    raise BuildError(
+                        f"{escola['co']}: {identificador} com n null sem matrícula ausente na página"
+                    )
             if not numero.get("limites"):
                 raise BuildError(f"{escola['co']}: {identificador} sem limites")
             if numero["estado"] not in ESTADOS:
@@ -1287,6 +1416,17 @@ def check_procedencia(site: Path, dados: dict, data_build: str) -> str:
                 raise BuildError(f"{escola['co']}: {identificador} com estado {numero['estado']} e valor")
             if not str(numero["arquivo"]).startswith("data/public/"):
                 raise BuildError(f"{escola['co']}: {identificador} aponta para fora de data/public")
+            exige_referencia = (
+                numero.get("bloco") in FAMILIAS_N_ALUNOS and str(numero.get("ano")) != "2025"
+            )
+            if exige_referencia and numero.get("n_referencia") != "2025":
+                raise BuildError(
+                    f"{escola['co']}: {identificador} sem n_referencia = '2025' para ano != 2025"
+                )
+            if not exige_referencia and "n_referencia" in numero:
+                raise BuildError(
+                    f"{escola['co']}: {identificador} com n_referencia onde não há outro ano de n"
+                )
     return f"{len(dados['escolas']):,} páginas com procedência completa"
 
 
@@ -1312,18 +1452,22 @@ def check_sem_ranking(site: Path) -> str:
 def check_limiar(site: Path, dados: dict, limiar: int) -> str:
     unidades = 0
     com_tdi = 0
+    sem_matricula = 0
     for escola in dados["escolas"]:
         markup = _html(site, escola["co"])
         for etapa, _, oferta in ETAPAS:
             if not escola[oferta]:
                 continue
             n = escola.get(f"mat_{etapa}_2025")
-            if n is None or n >= limiar:
+            if n is not None and n >= limiar:
                 continue
-            unidades += 1
-            if indicador(dados, escola["co"], etapa, "tdi")["estado"] in ("valor", "zero"):
-                com_tdi += 1
-            palavra = "aluno" if n == 1 else "alunos"
+            if n is None:
+                sem_matricula += 1
+            else:
+                unidades += 1
+                if indicador(dados, escola["co"], etapa, "tdi")["estado"] in ("valor", "zero"):
+                    com_tdi += 1
+            palavra = palavra_aluno(n)
             nota = f"{n} {palavra} {FRASE_N_PEQUENA}"
             for bloco in ("fluxo", "tdi", "tnr"):
                 achado = re.search(
@@ -1334,12 +1478,18 @@ def check_limiar(site: Path, dados: dict, limiar: int) -> str:
                 if not achado:
                     raise BuildError(f"{escola['co']}/{etapa}/{bloco}: falta o cartão da etapa")
                 trecho = achado.group(1)
-                if 'data-situacao="suprimido"' not in achado.group(0):
-                    raise BuildError(f"{escola['co']}/{etapa}/{bloco}: n < {limiar} não foi suprimido")
-                if nota not in re.sub(r"<[^>]+>", "", trecho):
-                    raise BuildError(f"{escola['co']}/{etapa}/{bloco}: falta a nota de amostra pequena")
+                if n is None:
+                    if 'data-situacao="suprimido"' not in achado.group(0) and 'data-situacao="ausente"' not in achado.group(0):
+                        raise BuildError(f"{escola['co']}/{etapa}/{bloco}: n ausente não foi suprimido")
+                    if FRASE_MATRICULA_2025 not in re.sub(r"<[^>]+>", "", trecho):
+                        raise BuildError(f"{escola['co']}/{etapa}/{bloco}: falta a frase de 2025")
+                else:
+                    if 'data-situacao="suprimido"' not in achado.group(0):
+                        raise BuildError(f"{escola['co']}/{etapa}/{bloco}: n < {limiar} não foi suprimido")
+                    if nota not in re.sub(r"<[^>]+>", "", trecho):
+                        raise BuildError(f"{escola['co']}/{etapa}/{bloco}: falta a nota de amostra pequena")
                 if re.search(rf'data-numero="{bloco}-[^"]+"', trecho):
-                    raise BuildError(f"{escola['co']}/{etapa}/{bloco}: publica taxa com n < {limiar}")
+                    raise BuildError(f"{escola['co']}/{etapa}/{bloco}: publica taxa sem denominador")
 
     alvo = "53001419"
     markup = _html(site, alvo)
@@ -1352,7 +1502,8 @@ def check_limiar(site: Path, dados: dict, limiar: int) -> str:
             raise BuildError(f"{alvo}: TDI 0,0% aparece como taxa mesmo com 15 alunos")
     return (
         f"{unidades:,} unidades escola × etapa com n < {limiar} suprimidas "
-        f"({com_tdi:,} delas com TDI valor/zero, a matriz do q16)"
+        f"({com_tdi:,} delas com TDI valor/zero, a matriz do q16); "
+        f"{sem_matricula:,} sem matrícula de 2025 também suprimidas"
     )
 
 
@@ -1361,7 +1512,8 @@ def check_estados(site: Path, dados: dict, limiar: int) -> str:
         "53000862": [FRASE_IDEB_PUBLICA],
         "53000781": [FRASE_IDEB_PRIVADA],
         "53000226": [FRASE_ETAPA],
-        "53020529": [FRASE_MATRICULA_2024, FRASE_SEM_INDICADOR],
+        "53020529": [FRASE_CENSO_2024_SEM_LINHA, FRASE_SEM_INDICADOR],
+        "53013662": [FRASE_MATRICULA_2024],
         "53000331": [FRASE_SEM_INDICADOR],
     }
     if 15 < limiar:
@@ -1379,6 +1531,22 @@ def check_estados(site: Path, dados: dict, limiar: int) -> str:
         markup = _html(site, escola["co"])
         if "NaN" in markup:
             raise BuildError(f"{escola['co']}: NaN na página")
+        texto_visivel = re.sub(r"<[^>]+>", "", markup)
+        if not escola["censo_2024_presente"]:
+            if FRASE_CENSO_2024_SEM_LINHA not in texto_visivel:
+                raise BuildError(f"{escola['co']}: sem linha em 2024 e sem a frase de L-63")
+            if FRASE_MATRICULA_2024 in texto_visivel:
+                raise BuildError(f"{escola['co']}: sem linha em 2024 com a frase de célula vazia")
+        elif any(escola.get(f"mat_{etapa}_2024") is None for etapa in ("CRE", "AI", "AF", "EM")):
+            if FRASE_MATRICULA_2024 not in texto_visivel:
+                raise BuildError(f"{escola['co']}: célula vazia em 2024 sem a frase de L-28")
+            if FRASE_CENSO_2024_SEM_LINHA in texto_visivel:
+                raise BuildError(f"{escola['co']}: linha em 2024 com a frase de escola ausente")
+        elif (
+            FRASE_MATRICULA_2024 in texto_visivel
+            or FRASE_CENSO_2024_SEM_LINHA in texto_visivel
+        ):
+            raise BuildError(f"{escola['co']}: frase de 2024 sem ausência de 2024")
         for estado, trecho in re.findall(
             r'data-estado="(ausente|nao_aplicavel|zero|valor)"[^>]*>([^<]*)<', markup
         ):
@@ -1389,7 +1557,7 @@ def check_estados(site: Path, dados: dict, limiar: int) -> str:
                 raise BuildError(f"{escola['co']}: estado nao_aplicavel sem travessão: {texto!r}")
             if estado == "zero" and texto and not texto.startswith("0"):
                 raise BuildError(f"{escola['co']}: estado zero sem 0: {texto!r}")
-    return "símbolos e frases de ausência conferidos"
+    return "símbolos, frases de 2024 e presença no Censo conferidos"
 
 
 def _hashes_site(site: Path) -> dict[str, str]:
@@ -1412,7 +1580,172 @@ def check_reprodutibilidade(public: Path, site: Path, data_build: str, limiar: i
     return "segundo build produz os mesmos bytes"
 
 
+def check_casos_limite(public: Path, data_build: str) -> str:
+    """Reproduz os casos de borda em uma cópia do insumo, sem build completo.
+
+    Copia `data/public/` para um diretório temporário, altera as escolas dos
+    casos, recalcula o sha256 e passa pelo `carregar_dados` (portanto pela coluna
+    nova e pelo guard de sha256). Renderiza só as escolas afetadas.
+    """
+    public = Path(public)
+    base_temporaria = Path("/tmp/opencode") if Path("/tmp/opencode").is_dir() else None
+    colunas_2024 = ["mat_inf_cre_2024", "mat_fund_ai_2024", "mat_fund_af_2024", "mat_med_2024"]
+    with tempfile.TemporaryDirectory(prefix="prova-dos-nove-casos-", dir=base_temporaria) as tmp:
+        tmp = Path(tmp)
+        for nome in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet", "procedencia.json"):
+            shutil.copy2(public / nome, tmp / nome)
+
+        escolas = pd.read_parquet(tmp / "escolas.parquet")
+
+        def altera(co: str, coluna: str, valor) -> None:
+            mascara = escolas["co_entidade"].astype(str) == co
+            if not mascara.any():
+                raise BuildError(f"caso de limite: escola {co} não está no insumo")
+            escolas.loc[mascara, coluna] = valor
+
+        # 2025 sem matrícula em anos iniciais; creche 2025 sem matrícula.
+        altera("53000854", "mat_fund_ai_2025", pd.NA)
+        altera("53000781", "mat_inf_cre_2025", pd.NA)
+        # Os dois casos de 2024: sem linha e com linha e células vazias.
+        altera("53020529", "censo_2024_presente", False)
+        for coluna in colunas_2024:
+            altera("53020529", coluna, pd.NA)
+        altera("53013662", "censo_2024_presente", True)
+        for coluna in colunas_2024:
+            altera("53013662", coluna, pd.NA)
+        # Oferta de 2025 não descreve a matrícula de 2024.
+        altera("53014618", "oferta_fund_ai", 0)
+        altera("53014618", "mat_fund_ai_2024", 493)
+        # n = 0 precisa ser gravado como 0 quando o limiar é 0.
+        altera("53000986", "mat_med_2025", 0)
+        # Creche com célula vazia em 2024 (o 53000781 tem 2024 com valor).
+        altera("53001419", "mat_inf_cre_2024", pd.NA)
+
+        for coluna in (
+            "mat_inf_cre_2024", "mat_fund_ai_2024", "mat_fund_af_2024", "mat_med_2024",
+            "mat_inf_cre_2025", "mat_fund_ai_2025", "mat_fund_af_2025", "mat_med_2025",
+        ):
+            escolas[coluna] = escolas[coluna].astype("Int64")
+        escolas["censo_2024_presente"] = escolas["censo_2024_presente"].astype(bool)
+        escolas.to_parquet(tmp / "escolas.parquet", index=False)
+
+        procedencia = json.loads((tmp / "procedencia.json").read_text(encoding="utf-8"))
+        procedencia["sha256"]["escolas.parquet"] = _sha256(tmp / "escolas.parquet")
+        (tmp / "procedencia.json").write_text(
+            json.dumps(procedencia, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        dados = carregar_dados(tmp)
+
+        def pagina(co: str, limiar: int) -> tuple[PaginaEscola, str, str]:
+            escola = dados["por_co"][co]
+            p = PaginaEscola(dados, escola, data_build, limiar)
+            markup = p.render()
+            return p, markup, re.sub(r"<[^>]+>", "", markup)
+
+        def numero(p: PaginaEscola, identificador: str) -> dict:
+            for item in p.numeros:
+                if item["id"] == identificador:
+                    return item
+            raise BuildError(f"caso de limite: falta o número {identificador}")
+
+        # 1. 2024 sem linha: frase de L-63, nunca a de célula vazia.
+        p, markup, texto = pagina("53020529", 30)
+        if FRASE_CENSO_2024_SEM_LINHA not in texto:
+            raise BuildError("53020529: falta 'a escola não consta do Censo de 2024'")
+        if FRASE_MATRICULA_2024 in texto:
+            raise BuildError("53020529: usa a frase de célula vazia sem ter linha em 2024")
+        if numero(p, "matricula-ai-2024")["estado"] != "ausente":
+            raise BuildError("53020529: matrícula de 2024 não está ausente")
+
+        # 2. 2024 com linha e célula vazia: frase de L-28.
+        p, markup, texto = pagina("53013662", 30)
+        if FRASE_MATRICULA_2024 not in texto:
+            raise BuildError("53013662: falta 'matrícula não declarada no Censo de 2024'")
+        if FRASE_CENSO_2024_SEM_LINHA in texto:
+            raise BuildError("53013662: usa a frase de escola ausente tendo linha em 2024")
+        if numero(p, "matricula-ai-2024")["estado"] != "ausente":
+            raise BuildError("53013662: matrícula de 2024 não está ausente")
+
+        # 3. 2025 sem matrícula: sem taxa, n = -, Ideb n null e n_referencia.
+        p, markup, texto = pagina("53000854", 30)
+        if FRASE_MATRICULA_2025 not in texto:
+            raise BuildError("53000854: falta 'matrícula não declarada no Censo de 2025'")
+        if "n = -" not in texto:
+            raise BuildError("53000854: a linha do n não mostra '-'")
+        if numero(p, "matricula-ai-2025")["estado"] != "ausente":
+            raise BuildError("53000854: matrícula de AI em 2025 não está ausente")
+        for item in p.numeros:
+            if item["bloco"] in ("fluxo", "tdi", "tnr") and item["etapa"] == "anos iniciais":
+                raise BuildError(f"53000854: publica taxa de AI sem denominador ({item['id']})")
+            if item["bloco"] in FAMILIAS_N_ALUNOS and item["n"] == 1:
+                raise BuildError(f"53000854: n virou 1 em {item['id']}")
+            if item["bloco"] == "ideb" and item["etapa"] == "anos iniciais":
+                if item["ano"] == "2025":
+                    if item["n"] is not None:
+                        raise BuildError("53000854: Ideb de 2025 deveria ter n null")
+                    if "n_referencia" in item:
+                        raise BuildError("53000854: Ideb de 2025 não leva n_referencia")
+                else:
+                    if item["n"] is not None:
+                        raise BuildError("53000854: Ideb histórico deveria ter n null")
+                    if item.get("n_referencia") != "2025":
+                        raise BuildError("53000854: Ideb histórico sem n_referencia 2025")
+
+        # 4. Creche 2025 ausente usa a frase de 2025; 2024 presente não a usa.
+        p, markup, texto = pagina("53000781", 30)
+        if FRASE_MATRICULA_2025 not in texto:
+            raise BuildError("53000781: falta a frase de 2025 no bloco da creche")
+        if FRASE_MATRICULA_2024 in texto or FRASE_CENSO_2024_SEM_LINHA in texto:
+            raise BuildError("53000781: bloco da creche com frase de 2024 sem célula vazia")
+        if numero(p, "creche-2025")["estado"] != "ausente":
+            raise BuildError("53000781: creche 2025 não está ausente")
+        if numero(p, "creche-2024")["estado"] != "valor":
+            raise BuildError("53000781: creche 2024 deveria continuar com valor")
+
+        # 4b. Creche com célula vazia em 2024 usa a frase de L-28.
+        p, markup, texto = pagina("53001419", 30)
+        if FRASE_MATRICULA_2024 not in texto:
+            raise BuildError("53001419: falta a frase de célula vazia de 2024 na creche")
+        if numero(p, "creche-2024")["estado"] != "ausente":
+            raise BuildError("53001419: creche 2024 não está ausente")
+
+        # 5. 36 school-years: oferta de 2025 não apaga matrícula positiva de 2024.
+        p, markup, texto = pagina("53014618", 30)
+        item = numero(p, "matricula-ai-2024")
+        if item["estado"] != "valor" or item["valor"] != 493:
+            raise BuildError("53014618: 493 alunos em AI/2024 não aparecem como valor")
+
+        # 6. Limiar 0: n = 0 é gravado como 0, não como 1.
+        p, markup, texto = pagina("53000986", 0)
+        taxas = [
+            item for item in p.numeros
+            if item["bloco"] in ("fluxo", "tdi", "tnr") and item["etapa"] == "ensino médio"
+        ]
+        if not taxas:
+            raise BuildError("53000986: nenhuma taxa do médio renderizada a limiar 0")
+        if any(item["n"] != 0 for item in taxas):
+            raise BuildError("53000986: n=0 não foi gravado como 0 a limiar 0")
+
+    return (
+        "53 sem linha/3 com célula vazia em 2024, 2025 e creche ausentes, "
+        "493 em 2024 preservado e n=0 a limiar 0 conferidos"
+    )
+
+
 def check_licencas(site: Path, dados: dict) -> str:
+    registros = dados["registros"]
+    licenca_por_fonte: dict[str, tuple[str, str | None]] = {}
+    for familia, registro in registros.items():
+        licenca = registro.get("licenca")
+        if not licenca:
+            raise BuildError(f"registro {familia!r} sem licença em procedencia.json")
+        minusculo = str(licenca).lower()
+        if any(termo in minusculo for termo in ("odbl", "odc", "open data commons")):
+            raise BuildError(f"registro {familia!r} publicado sob licença ODbL: {licenca!r}")
+        licenca_por_fonte[registro["fonte"]] = (licenca, registro.get("licenca_url"))
+
     fontes = set()
     for caminho in sorted((site / "dados").glob("*.json")):
         registro = json.loads(caminho.read_text(encoding="utf-8"))
@@ -1423,10 +1756,18 @@ def check_licencas(site: Path, dados: dict) -> str:
             for termo in ("odbl", "odc", "open data commons", "matriculas__relatorio_matriculas"):
                 if termo in minusculo:
                     raise BuildError(f"{caminho.name}: fonte ODbL/matrículas proibida: {fonte}")
+            if fonte not in licenca_por_fonte:
+                raise BuildError(f"{caminho.name}: fonte {fonte!r} sem licença no insumo")
+
     creditos = (site / "creditos.html").read_text(encoding="utf-8")
     for fonte in fontes:
         if fonte not in creditos:
             raise BuildError(f"creditos.html não lista a fonte {fonte!r}")
+        licenca, url = licenca_por_fonte[fonte]
+        if html.escape(licenca) not in creditos:
+            raise BuildError(f"creditos.html não mostra a licença de {fonte!r}")
+        if url and html.escape(url, quote=True) not in creditos:
+            raise BuildError(f"creditos.html não mostra a licenca_url de {fonte!r}")
     for obrigatorio in ("MIT", "CC BY 4.0", "Marcelo Anaissi"):
         if obrigatorio not in creditos:
             raise BuildError(f"creditos.html sem {obrigatorio!r}")
@@ -1443,11 +1784,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, default=Path("site"), help="diretório de saída")
     ap.add_argument("--data-build", default=DATA_BUILD_PADRAO, help="único carimbo de tempo do build")
     ap.add_argument("--limiar-n", type=int, default=LIMIAR_N_PADRAO, help="limiar de n pequeno (D4)")
-    ap.add_argument("--check", action="store_true", help="roda os seis critérios do §8 e para no primeiro erro")
+    ap.add_argument("--check", action="store_true", help="roda os critérios do §8 e os casos de limite")
     ap.add_argument("--check-procedencia", action="store_true", help="critério 1: procedência de todo número")
     ap.add_argument("--check-limiar", action="store_true", help="critério 3: n < limiar não publica taxa")
     ap.add_argument("--check-estados", action="store_true", help="critério 4: valor, zero, ausente e não aplicável")
     ap.add_argument("--check-licencas", action="store_true", help="critério 6: licenças e fontes")
+    ap.add_argument("--check-casos", action="store_true", help="casos de limite: 2024, 2025, creche, 493 e limiar 0")
     args = ap.parse_args(argv)
     if args.limiar_n < 0:
         ap.error("--limiar-n não pode ser negativo")
@@ -1460,7 +1802,10 @@ def main(argv: list[str] | None = None) -> int:
 
     selecionados = []
     if args.check:
-        selecionados = ["procedencia", "ranking", "limiar", "estados", "reprodutibilidade", "licencas"]
+        selecionados = [
+            "procedencia", "ranking", "limiar", "estados",
+            "reprodutibilidade", "licencas", "casos_limite",
+        ]
     else:
         if args.check_procedencia:
             selecionados.append("procedencia")
@@ -1470,6 +1815,8 @@ def main(argv: list[str] | None = None) -> int:
             selecionados.append("estados")
         if args.check_licencas:
             selecionados.append("licencas")
+        if args.check_casos:
+            selecionados.append("casos_limite")
 
     verificacoes = {
         "procedencia": lambda: check_procedencia(args.out, resultado["dados"], args.data_build),
@@ -1480,6 +1827,7 @@ def main(argv: list[str] | None = None) -> int:
             args.public, args.out, args.data_build, args.limiar_n
         ),
         "licencas": lambda: check_licencas(args.out, resultado["dados"]),
+        "casos_limite": lambda: check_casos_limite(args.public, args.data_build),
     }
     for nome in selecionados:
         try:

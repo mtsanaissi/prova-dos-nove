@@ -1,4 +1,7 @@
 {
+  "execucao": {
+    "etapas_puladas": []
+  },
   "registros": [
     {
       "anos": [
@@ -6,9 +9,11 @@
       ],
       "arquivo": "data/public/escolas.parquet",
       "bloco": 1,
-      "calculo": "cópia dos campos NO_ENTIDADE, Nome RA e Nome Rede do cadastro",
+      "calculo": "cópia dos campos Nome da escola, Nome RA e Nome Rede do cadastro",
       "familia": "identificacao",
       "fonte": "SEEDF — Cadastro de Unidades Escolares 2025",
+      "licenca": "CC BY (Creative Commons Atribuição)",
+      "licenca_url": "http://www.opendefinition.org/licenses/cc-by",
       "limites": [
         "L-36",
         "L-37"
@@ -23,6 +28,8 @@
       "calculo": "sinalizador 1 = oferta da etapa; 0 = não oferta; não traduzir 'é EI'",
       "familia": "oferta",
       "fonte": "SEEDF — Cadastro de Unidades Escolares 2025",
+      "licenca": "CC BY (Creative Commons Atribuição)",
+      "licenca_url": "http://www.opendefinition.org/licenses/cc-by",
       "limites": [
         "L-57",
         "L-36"
@@ -38,11 +45,14 @@
       "calculo": "matrícula da etapa por escola, como está no campo do Censo",
       "familia": "matricula",
       "fonte": "INEP — Censo Escolar 2024–2025",
+      "licenca": "público, sem licença declarada no portal",
+      "licenca_url": null,
       "limites": [
         "L-28",
         "L-43",
         "L-48",
-        "L-62"
+        "L-62",
+        "L-63"
       ]
     },
     {
@@ -64,6 +74,8 @@
       "calculo": "valor observado da etapa, como publicado; a meta projetada não entra",
       "familia": "ideb",
       "fonte": "INEP — Ideb por Escola 2005–2025",
+      "licenca": "público, sem licença declarada no portal",
+      "licenca_url": null,
       "limites": [
         "L-08",
         "L-12",
@@ -81,6 +93,8 @@
       "calculo": "percentual da etapa, como publicado",
       "familia": "fluxo",
       "fonte": "INEP — Taxas de Rendimento por Escola 2025",
+      "licenca": "público, sem licença declarada no portal",
+      "licenca_url": null,
       "limites": [
         "L-11",
         "L-59",
@@ -97,6 +111,8 @@
       "calculo": "percentual da etapa, como publicado",
       "familia": "tdi",
       "fonte": "INEP — Distorção Idade-Série por Escola 2025",
+      "licenca": "público, sem licença declarada no portal",
+      "licenca_url": null,
       "limites": [
         "L-11",
         "L-59",
@@ -113,6 +129,8 @@
       "calculo": "percentual da etapa, como publicado",
       "familia": "tnr",
       "fonte": "INEP — Taxa de Não-Resposta por Escola 2025",
+      "licenca": "público, sem licença declarada no portal",
+      "licenca_url": null,
       "limites": [
         "L-09",
         "L-11",
@@ -128,6 +146,8 @@
       "calculo": "presença do item declarada pela escola",
       "familia": "infraestrutura",
       "fonte": "SEEDF — Infraestrutura Escolar 2025",
+      "licenca": "CC BY (Creative Commons Atribuição)",
+      "licenca_url": "http://www.opendefinition.org/licenses/cc-by",
       "limites": [
         "L-25",
         "L-29",
@@ -145,15 +165,18 @@
       "calculo": "matrícula em creche da escola, como está no campo do Censo",
       "familia": "creche",
       "fonte": "INEP — Censo Escolar 2024–2025",
+      "licenca": "público, sem licença declarada no portal",
+      "licenca_url": null,
       "limites": [
         "L-27",
         "L-28",
-        "L-62"
+        "L-62",
+        "L-63"
       ]
     }
   ],
   "sha256": {
-    "escolas.parquet": "b4652dbee18c87fb1c0eb8f454cdcf139189d41113ac27a789c875ead17174ef",
+    "escolas.parquet": "3ded32286f509826da52e29908b8ee3e172adb0c4a094d8a9fec26e21b4af2d2",
     "indicadores.parquet": "b7b6937ca5b5b1d2eeabc9ca280c517199e2a918f0227a341936f99dbc14e1cb",
     "infraestrutura.parquet": "dd53b3a8b8d9c6517e0ebce39662ab9f5ff98426186a25491eb9a0aa790bf722"
   }

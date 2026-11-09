@@ -114,13 +114,14 @@ inventário, dicionário de dados e as respostas que os dados já permitem.
 **Build da fase 1 — página por escola (2026-11-07).** O contrato está em
 [`docs/FASE-1.md`](docs/FASE-1.md) e o build em `scripts/12_build_site.py`.
 `06_analysis.py --public data/public` exporta o recorte versionado (1.291
-escolas, indicadores com `estado` e infraestrutura das 927 escolas de EF/EM) e
-o build gera `site/`: índice alfabético sem número, uma página por escola, a
-procedência de cada número em `site/dados/<CO_ENTIDADE>.json` e as páginas
-`como-ler.html` e `creditos.html`. O workflow
-`.github/workflows/pages.yml` publica o resultado no GitHub Pages; antes do
-primeiro deploy, é preciso ativar Pages em "GitHub Actions" nas configurações do
-repositório. O site não é versionado; o insumo `data/public/` é.
+escolas, indicadores com `estado`, infraestrutura das 927 escolas de EF/EM e a
+flag `censo_2024_presente`) e o build gera `site/`: índice alfabético sem número,
+uma página por escola, a procedência de cada número em
+`site/dados/<CO_ENTIDADE>.json` e as páginas `como-ler.html` e
+`creditos.html`. O workflow `.github/workflows/pages.yml` publica o resultado
+no GitHub Pages com `--check` antes do upload; antes do primeiro deploy, é
+preciso ativar Pages em "GitHub Actions" nas configurações do repositório. O
+site não é versionado; o insumo `data/public/` é.
 
 Fontes baixadas e verificadas, todas com sha256 no `MANIFEST.md` (146 linhas):
 80 arquivos da SEEDF (458 MB), 53 da PDAD-A (100 MB — 50 relatórios, dois

@@ -15,7 +15,9 @@ Saída:   `data/interim/q1_unidades.csv` ... `q8_conferencia_seedf.csv`,
          (`escolas.parquet`, `indicadores.parquet`, `infraestrutura.parquet` e
          `procedencia.json`).
 Idempotente: sim — leitura e reescrita das saídas; o insumo público só é
-sobrescrito com `--force` quando o sha256 do destino difere.
+sobrescrito com `--force` quando o sha256 do destino difere. Com `--public`,
+uma etapa pulada impede a gravação (código 1) a menos de `--parcial`; nesse
+caso a lista de etapas puladas vai para `procedencia.json`.
 
 Regra de leitura: nulo é ausente, `0` é zero. Nunca se soma nulo como zero.
 
@@ -1906,6 +1908,19 @@ INFRA_ITENS = [
 
 ANOS_IDEB = [str(ano) for ano in range(2005, 2026, 2)]
 
+# Licença por família: a SEEDF vem do inventário do CKAN (o valor declarado no
+# conjunto, nunca inferido); a INEP não declara licença no portal. O export falha
+# antes de gravar quando uma família SEEDF resolve para ODbL (L-62).
+LICENCA_INEP = "público, sem licença declarada no portal"
+
+DATASET_SEEDF_POR_FAMILIA = {
+    "identificacao": "relacao-de-unidades-escolares-abrangendo-todas-as-redes-de-ensino-do-distrito-federal",
+    "oferta": "relacao-de-unidades-escolares-abrangendo-todas-as-redes-de-ensino-do-distrito-federal",
+    "infraestrutura": "dados-de-infraestrutura-abrangendo-todas-as-redes-de-ensino-df",
+}
+
+FAMILIAS_INEP = {"matricula", "ideb", "fluxo", "tdi", "tnr", "creche"}
+
 REGISTROS_PUBLICOS = [
     {
         "familia": "identificacao",
@@ -1913,7 +1928,7 @@ REGISTROS_PUBLICOS = [
         "fonte": "SEEDF — Cadastro de Unidades Escolares 2025",
         "arquivo": "data/public/escolas.parquet",
         "anos": ["2025"],
-        "calculo": "cópia dos campos NO_ENTIDADE, Nome RA e Nome Rede do cadastro",
+        "calculo": "cópia dos campos Nome da escola, Nome RA e Nome Rede do cadastro",
         "limites": ["L-36", "L-37"],
     },
     {
@@ -1932,7 +1947,7 @@ REGISTROS_PUBLICOS = [
         "arquivo": "data/public/escolas.parquet",
         "anos": ["2024", "2025"],
         "calculo": "matrícula da etapa por escola, como está no campo do Censo",
-        "limites": ["L-28", "L-43", "L-48", "L-62"],
+        "limites": ["L-28", "L-43", "L-48", "L-62", "L-63"],
     },
     {
         "familia": "ideb",
@@ -1986,13 +2001,88 @@ REGISTROS_PUBLICOS = [
         "arquivo": "data/public/escolas.parquet",
         "anos": ["2024", "2025"],
         "calculo": "matrícula em creche da escola, como está no campo do Censo",
-        "limites": ["L-27", "L-28", "L-62"],
+        "limites": ["L-27", "L-28", "L-62", "L-63"],
     },
 ]
 
 
 class ExportError(Exception):
     """O insumo público não pode ser gravado sem intervenção explícita."""
+
+
+def _licencas_seedf() -> dict[str, tuple[str, str | None]]:
+    """Resolve a licença das famílias SEEDF no inventário do CKAN.
+
+    Devolve `{familia: (licenca, licenca_url)}` com o `license_title` e o
+    `license_url` do conjunto, como declarados. Falha se o inventário faltar,
+    se o conjunto não estiver nele, se a licença estiver vazia ou se o conjunto
+    for ODbL (L-62).
+    """
+    caminho = INTERIM / "seedf_datasets.csv"
+    if not caminho.is_file():
+        raise ExportError(
+            f"falta o inventário da SEEDF em {caminho}; rode 01_inventory_seedf.py "
+            "antes de exportar o insumo público"
+        )
+    inventario = pd.read_csv(caminho, dtype=str, keep_default_na=False)
+    if "dataset" not in inventario or "licenca_titulo" not in inventario:
+        raise ExportError(f"{caminho} sem as colunas dataset/licenca_titulo")
+
+    resolvidas: dict[str, tuple[str, str | None]] = {}
+    for familia, dataset in DATASET_SEEDF_POR_FAMILIA.items():
+        linha = inventario[inventario["dataset"] == dataset]
+        if len(linha) != 1:
+            raise ExportError(
+                f"família {familia!r}: conjunto {dataset!r} não encontrado (ou duplicado) "
+                f"em {caminho}"
+            )
+        licenca_id = str(linha.iloc[0]["licenca_id"]).strip().lower()
+        titulo = str(linha.iloc[0]["licenca_titulo"]).strip()
+        url = str(linha.iloc[0]["licenca_url"]).strip() or None
+        if licenca_id == "odc-odbl" or "odbl" in titulo.lower() or "open data commons" in titulo.lower():
+            raise ExportError(
+                f"família {familia!r} resolve para o conjunto ODbL {dataset!r} "
+                f"({titulo or licenca_id}); a página não publica derivado ODbL (L-62)"
+            )
+        if not titulo:
+            raise ExportError(
+                f"família {familia!r}: conjunto {dataset!r} sem licença declarada em {caminho}"
+            )
+        rotulo = {"cc-by": "CC BY", "cc-by-sa": "CC BY-SA"}.get(licenca_id)
+        licenca = f"{rotulo} ({titulo})" if rotulo else titulo
+        resolvidas[familia] = (licenca, url)
+    return resolvidas
+
+
+def _registros_publicos() -> list[dict]:
+    """Copia `REGISTROS_PUBLICOS` e injeta a licença resolvida por família.
+
+    Duas famílias da mesma fonte precisam declarar a mesma licença e a mesma
+    URL; divergência é erro de inventário, não escolha silenciosa.
+    """
+    licencas = _licencas_seedf()
+    registros = []
+    por_fonte: dict[str, tuple[str, str | None]] = {}
+    for base in REGISTROS_PUBLICOS:
+        registro = dict(base)
+        familia = registro["familia"]
+        if familia in licencas:
+            registro["licenca"], registro["licenca_url"] = licencas[familia]
+        elif familia in FAMILIAS_INEP:
+            registro["licenca"], registro["licenca_url"] = LICENCA_INEP, None
+        else:
+            raise ExportError(
+                f"família {familia!r} sem origem de licença declarada no export"
+            )
+        chave = (registro["licenca"], registro["licenca_url"])
+        anterior = por_fonte.setdefault(registro["fonte"], chave)
+        if anterior != chave:
+            raise ExportError(
+                f"famílias da fonte {registro['fonte']!r} divergem em licença: "
+                f"{anterior!r} × {chave!r}"
+            )
+        registros.append(registro)
+    return registros
 
 
 def _escolas_publicas() -> pd.DataFrame:
@@ -2020,6 +2110,11 @@ def _escolas_publicas() -> pd.DataFrame:
 
     censo = pd.read_parquet(INTERIM / "inep" / "censo_escola_df.parquet")
     censo["CO_ENTIDADE"] = censo["CO_ENTIDADE"].astype(str).str.strip()
+    censo_2024 = censo[censo["ano"] == 2024]
+    if censo_2024["CO_ENTIDADE"].duplicated().any():
+        raise ExportError("Censo 2024 tem CO_ENTIDADE duplicado")
+    e["censo_2024_presente"] = e["co_entidade"].isin(censo_2024["CO_ENTIDADE"]).astype(bool)
+
     for ano, coluna_censo, destino in [
         (2024, "QT_MAT_INF_CRE", "mat_inf_cre_2024"),
         (2024, "QT_MAT_FUND_AI", "mat_fund_ai_2024"),
@@ -2037,8 +2132,23 @@ def _escolas_publicas() -> pd.DataFrame:
             recorte[coluna_censo].reindex(e["co_entidade"]).to_numpy(), dtype="Int64"
         )
 
+    colunas_2024 = [
+        "mat_inf_cre_2024",
+        "mat_fund_ai_2024",
+        "mat_fund_af_2024",
+        "mat_med_2024",
+    ]
+    inconsistentes = e.loc[
+        (~e["censo_2024_presente"]) & e[colunas_2024].notna().any(axis=1), "co_entidade"
+    ]
+    if len(inconsistentes):
+        raise ExportError(
+            "escola sem linha no Censo 2024 com matrícula de 2024: "
+            + ", ".join(sorted(inconsistentes.astype(str)))
+        )
+
     colunas = [
-        "co_entidade", "nome", "ra", "rede", "rede_cadastro",
+        "co_entidade", "nome", "ra", "rede", "rede_cadastro", "censo_2024_presente",
         "oferta_inf_cre", "oferta_inf_pre", "oferta_fund_ai", "oferta_fund_af",
         "oferta_med", "oferta_eja", "oferta_esp", "oferta_prof",
         "mat_inf_cre_2024", "mat_fund_ai_2024", "mat_fund_af_2024", "mat_med_2024",
@@ -2177,7 +2287,11 @@ def _grava_parquets(destino: Path, escolas: pd.DataFrame, indicadores: pd.DataFr
     }
 
 
-def export_public(dest: Path, force: bool = False) -> dict[str, int]:
+def export_public(
+    dest: Path,
+    force: bool = False,
+    etapas_puladas: list[str] | None = None,
+) -> dict[str, int]:
     """Exporta `data/public/` a partir de `data/interim/`.
 
     Entrada: parquets de `data/interim/seedf/` e `data/interim/inep/`.
@@ -2186,6 +2300,9 @@ def export_public(dest: Path, force: bool = False) -> dict[str, int]:
     Idempotente: sim — o mesmo insumo produz os mesmos bytes. Se `dest` já tem
     um arquivo com sha256 diferente do que seria gravado, a exportação falha e
     só sobrescreve com `force=True`, para que mudança no insumo apareça no diff.
+
+    `etapas_puladas` só é preenchido quando o `06` roda com `--parcial`; a lista
+    fica registrada em `procedencia.json` e o build avisa sobre ela.
     """
     import tempfile
 
@@ -2199,7 +2316,11 @@ def export_public(dest: Path, force: bool = False) -> dict[str, int]:
     with tempfile.TemporaryDirectory(prefix=".public-", dir=dest.parent) as tmp:
         tmp = Path(tmp)
         hashes = _grava_parquets(tmp, escolas, indicadores, infra)
-        procedencia = {"sha256": hashes, "registros": REGISTROS_PUBLICOS}
+        procedencia = {
+            "sha256": hashes,
+            "registros": _registros_publicos(),
+            "execucao": {"etapas_puladas": [str(etapa) for etapa in (etapas_puladas or [])]},
+        }
         (tmp / "procedencia.json").write_text(
             json.dumps(procedencia, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
             encoding="utf-8",
@@ -2297,9 +2418,25 @@ def main(argv: list[str] | None = None) -> int:
     registro.to_csv(INTERIM / "q0_execucao.csv", index=False)
     print("\n== execução: " + "; ".join(f"{r.etapa}={r.status}" for r in registro.itertuples()))
 
+    puladas = registro[registro["status"] == "pulado"]
+    if len(puladas):
+        print(
+            f"\n{len(puladas)} etapa(s) pulada(s): "
+            + ", ".join(puladas["etapa"])
+            + ". Veja o motivo em data/interim/q0_execucao.csv."
+        )
+        if not args.parcial:
+            print("Use --parcial para aceitar o resultado incompleto.")
+            return 1
+        print("--parcial: exportando o insumo com o resultado incompleto.")
+
     if args.public:
         try:
-            resumo = export_public(args.public, force=args.force)
+            resumo = export_public(
+                args.public,
+                force=args.force,
+                etapas_puladas=puladas["etapa"].tolist(),
+            )
         except ExportError as exc:
             print(f"\n== EXPORTAÇÃO PÚBLICA FALHOU: {exc}")
             return 1
@@ -2308,16 +2445,6 @@ def main(argv: list[str] | None = None) -> int:
             f"{resumo['escolas']:,} escolas, {resumo['indicadores']:,} linhas de indicador, "
             f"{resumo['infraestrutura']:,} linhas de infraestrutura em {args.public}"
         )
-
-    puladas = registro[registro["status"] == "pulado"]
-    if len(puladas) and not args.parcial:
-        print(
-            f"\n{len(puladas)} etapa(s) pulada(s): "
-            + ", ".join(puladas["etapa"])
-            + ". Veja o motivo em data/interim/q0_execucao.csv; "
-            "use --parcial para aceitar o resultado incompleto."
-        )
-        return 1
     return 0
 
 

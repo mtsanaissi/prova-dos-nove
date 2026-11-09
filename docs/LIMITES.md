@@ -78,6 +78,7 @@ risco aberto. O registro não introduz número novo: todo valor citado existe em
 | L-60 | Na aba `Brasil (Anos Finais)`, a célula do código do Ideb de 2023 está vazia, mas a coluna tem valor; ler só a linha de códigos perderia o dado | risco-de-leitura | REPORT §2.4, valor do Brasil em 2023 nos anos finais | SCHEMA, bloco `divulgacao_brasil_ideb_2025.zip` (Armadilha); worklog 2026-10-22-05 §3 | fechado (2026-10-22) | nada; `processar_brasil()` recupera o código da faixa de cabeçalho |
 | L-61 | Nenhum byte da INEP foi conferido contra o servidor, exceto o zip do Censo 2024 (conferido em 2026-11-06); o zip de 2025 (537.217.189 B) segue sem conferência | risco-de-leitura | todos os números do Censo 2025 | `data/raw/MANIFEST.md` linha 155; `curl -sk -C -` em 2026-11-06 | aberto | baixar `/dados_abertos/microdados_censo_escolar_2025_.zip` (538 MB) com `curl -sk -C -` e comparar o sha256 com o `MANIFEST`; não bloqueia número atual, porque o parquet casa 100% com o universo da SEEDF |
 | L-62 | A série de matrículas por modalidade da SEEDF (`matriculas__relatorio_matriculas_*`) é publicada sob ODbL; derivado dela teria de ser licenciado sob ODbL | escopo | README §Licença; qualquer número publicado que dependa da série | `package_show` de `serie-historica-numero-de-matriculas-por-modalidade-…`; `data/interim/seedf_resources.csv`, coluna `license_id` | fechado (2026-11-06) | decidido: a página publica matrícula pelo Censo da INEP 2024–2025 e a série da SEEDF fica como diagnóstico interno; reabrir só com política de derivado ODbL |
+| L-63 | O Censo de 2024 tem 1.360 linhas no DF contra 1.291 escolas no cadastro de 2025: 53 escolas de 2025 não têm linha em 2024 e 3 têm linha com as quatro células de matrícula vazias; "a escola não consta" não é "matrícula não declarada" | ausencia | docs/FASE-1.md §3.1; frase do bloco 3/9; 53 páginas de escola | `data/interim/inep/censo_escola_df.parquet`; `data/public/escolas.parquet`, coluna `censo_2024_presente`; worklog 2026-11-09-01-correcoes-fase-1.md | aberto | dicionário/nota da INEP que diga se a ausência de linha é escola inexistente, código novo ou outro motivo; a flag apenas registra a presença |
 
 ## Notas
 
@@ -205,6 +206,17 @@ que corrigiu registra o erro e a correção em
 `ideb_projetado`, meta do 1º ciclo (2007–2021). As colunas de projeção terminam
 em 2021 e não há meta para 2023 nem 2025. Ver SCHEMA, "Ideb observado ×
 projetado".
+
+**L-63.** O Censo de 2024 tem 1.360 linhas no DF; o cadastro de 2025 tem 1.291
+escolas. 53 dessas escolas não têm linha no Censo de 2024 e 3 (`53013662`,
+`53015665`, `53019415`) têm linha com as quatro células de matrícula vazias. A
+frase "a escola não consta do Censo de 2024" descreve a ausência de linha;
+"matrícula não declarada no Censo de 2024" continua sendo a leitura da célula
+vazia (L-28). A flag `censo_2024_presente` é o critério: ela não afirma que a
+escola é nova nem converte matrícula positiva em `nao_aplicavel`. A leitura da
+matrícula continua sujeita a L-28 (célula vazia), L-43 (mudança de colunas
+entre 2024 e 2025) e L-62 (a série ODbL da SEEDF não entra). Ver
+`data/public/escolas.parquet` e o worklog 2026-11-09.
 
 ## Reconciliação dos itens provisórios
 

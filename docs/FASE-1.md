@@ -40,13 +40,13 @@ inteira, n = 1.
 |---|---|---|---|---|---|---|
 | 1 | identificação | cadastro SEEDF, `escolas__relatorio_escolas_2025.parquet` (`NO_ENTIDADE`, `Nome RA`, `Nome Rede`) | 2025 | cópia do campo | 1.291 | L-36, L-37 |
 | 2 | oferta por etapa | mesmo cadastro, vetor `INF_CRE`…`PROF` (8 sinalizadores) | 2025 | flag 1 = oferta; **não** traduzir "é EI" | 1.291 | L-57, L-36 |
-| 3 | matrícula por etapa | Censo INEP, `censo_escola_df.parquet` (`QT_MAT_INF_CRE`, `QT_MAT_FUND_AI`, `QT_MAT_FUND_AF`, `QT_MAT_MED`) | 2024–2025 | soma da etapa por escola, como está no campo | 1.360 linhas em 2024 (76 com célula vazia) e 1.291 em 2025 | L-28, L-43, L-48, L-62 |
+| 3 | matrícula por etapa | Censo INEP, `censo_escola_df.parquet` (`QT_MAT_INF_CRE`, `QT_MAT_FUND_AI`, `QT_MAT_FUND_AF`, `QT_MAT_MED`) | 2024–2025 | soma da etapa por escola, como está no campo; a presença em 2024 vem da flag `censo_2024_presente`, nunca da oferta de 2025 | 1.360 linhas em 2024 (76 com célula vazia; 53 escolas de 2025 sem linha) e 1.291 em 2025 | L-28, L-43, L-48, L-62, L-63 |
 | 4 | Ideb por etapa | `ideb_escolas_df.parquet`, `indicador = ideb_observado` | 2005–2025, de dois em dois anos | valor observado; **a meta (`ideb_projetado`) não é publicada**; privada só até 2017 | 499 escolas com valor em 2025 | L-08, L-12, L-30, L-33, L-56 |
 | 5 | fluxo | `tx_rend_escolas_df.parquet`, `categoria ∈ {aprovacao, reprovacao, abandono}` | 2025 | percentual da etapa, como publicado | 1.355 unidades escola × etapa | L-11, L-59, L-21, D4 |
 | 6 | distorção idade-série | `tdi_escolas_df.parquet` | 2025 | percentual da etapa | 1.355 unidades | L-11, L-59, L-40, D4 |
 | 7 | não-resposta | `tnr_escolas_df.parquet` | 2025 | percentual da etapa | 1.355 unidades | L-09, L-11, L-59 |
 | 8 | infraestrutura | `relatorio_infraestrutura_2025.parquet`, colunas `IN_*` | 2025 | presença do item, nos 8 itens listados abaixo | 927 | L-25, L-29, L-38, L-51 |
-| 9 | creche da escola | Censo INEP, `censo_escola_df.parquet` (`QT_MAT_INF_CRE`) | 2024–2025 | matrícula em creche da escola, como está no campo | unidades com `INF_CRE = 1` (475 em 2025) | L-27, L-28, L-62 |
+| 9 | creche da escola | Censo INEP, `censo_escola_df.parquet` (`QT_MAT_INF_CRE`) | 2024–2025 | matrícula em creche da escola, como está no campo; presença em 2024 pela flag `censo_2024_presente` | unidades com `INF_CRE = 1` (475 em 2025) | L-27, L-28, L-62, L-63 |
 
 **Itens de infraestrutura publicados (decisão do mantenedor, 2026-11-06).**
 Oito linhas, ano de 2025, universo das 927 escolas que oferecem ensino
@@ -147,7 +147,10 @@ o id que a sustenta, e todas são explicadas uma vez em `site/como-ler.html`
 | etapa não ofertada | blocos 4–7, quando a etapa não está no vetor de oferta | `— esta etapa não é ofertada pela escola em 2025` | L-59 |
 | Ideb ausente, rede privada | bloco 4, escola privada sem valor no ano | `sem Ideb: a INEP não publica resultado de escola privada depois de 2017` | L-08 |
 | Ideb ausente, rede pública | bloco 4, escola pública sem valor no ano | `sem Ideb em 2025: a INEP não publica quando há menos de 10 alunos na prova ou participação abaixo de 80%, e não informa qual foi o caso` | L-09, L-30 |
-| matrícula não declarada | bloco 3, Censo de 2024 com a célula vazia | `matrícula não declarada no Censo de 2024` | L-28 |
+| matrícula não declarada, 2024 | bloco 3 e 9, Censo de 2024 com a célula vazia | `matrícula não declarada no Censo de 2024` | L-28 |
+| escola fora do Censo de 2024 | bloco 3 e 9, escola de 2025 sem linha no Censo de 2024 | `a escola não consta do Censo de 2024` | L-63 |
+| matrícula não declarada, 2025 | bloco 3, 5, 6, 7 e 9, Censo de 2025 com a célula vazia | `matrícula não declarada no Censo de 2025` | L-28 |
+| infraestrutura fora do universo | bloco 8, escola que não oferece ensino fundamental nem médio | `a infraestrutura é publicada para as escolas que oferecem ensino fundamental ou médio` | L-25 |
 | nenhum indicador | página sem Ideb e sem taxas | `esta escola não tem Ideb nem taxas publicadas em 2025` | L-09 |
 | n abaixo do limiar | blocos 5, 6 e 7 quando n < 30 | `16 alunos nesta etapa — o indicador não é publicado quando a turma é pequena` (o número é o n da escola) | D4, L-40 |
 
@@ -193,10 +196,10 @@ o build lê. Quatro arquivos, nenhum com microdado, nenhum com linha de aluno:
 
 | arquivo | grão | colunas | tamanho medido |
 |---|---|---|---|
-| `escolas.parquet` | escola (1.291) | `co_entidade`, `nome`, `ra`, `rede`, `oferta_inf_cre`…`oferta_prof` (8 flags), `mat_inf_cre_2024`, `mat_fund_ai_2024`, `mat_fund_af_2024`, `mat_med_2024` e as quatro de 2025 | 240 KB |
-| `indicadores.parquet` | escola × etapa × indicador × ano | `co_entidade`, `etapa` (`AI`/`AF`/`EM`), `indicador` (`ideb_observado`, `tdi`, `tnr`, `aprovacao`, `reprovacao`, `abandono`), `ano`, `valor`, `estado` | 800 KB |
-| `infraestrutura.parquet` | escola × item (8 itens do §2) | `co_entidade`, `item` (nome da coluna `IN_*`), `ano` (2025), `valor` (0/1), `estado` | 25 KB |
-| `procedencia.json` | um registro por indicador/família | `fonte`, `arquivo`, `anos`, `calculo`, `limites` e o `sha256` dos três parquets acima | 15 KB |
+| `escolas.parquet` | escola (1.291) | `co_entidade`, `nome`, `ra`, `rede`, `rede_cadastro`, `censo_2024_presente`, `oferta_inf_cre`…`oferta_prof` (8 flags), `mat_inf_cre_2024`, `mat_fund_ai_2024`, `mat_fund_af_2024`, `mat_med_2024` e as quatro de 2025 | 61 KB |
+| `indicadores.parquet` | escola × etapa × indicador × ano | `co_entidade`, `etapa` (`AI`/`AF`/`EM`), `indicador` (`ideb_observado`, `tdi`, `tnr`, `aprovacao`, `reprovacao`, `abandono`), `ano`, `valor`, `estado` | 40 KB |
+| `infraestrutura.parquet` | escola × item (8 itens do §2) | `co_entidade`, `item` (nome da coluna `IN_*`), `ano` (2025), `valor` (0/1), `estado` | 13 KB |
+| `procedencia.json` | um registro por indicador/família | `fonte`, `arquivo`, `anos`, `calculo`, `limites`, `licenca`, `licenca_url`; topo com `sha256` dos três parquets e `execucao.etapas_puladas` | 4.7 KB |
 
 Regras do export, todas verificáveis:
 
@@ -208,6 +211,17 @@ Regras do export, todas verificáveis:
   ciclo 2007–2021, não previsão, e decisão do mantenedor (2026-11-06) é não
   publicá-la nesta versão (L-56).
 - Mapa de etapa entre fontes: Ideb `AI`/`AF`/`EM` ↔ recorte `FUN_AI`/`FUN_AF`/`MED`.
+- `censo_2024_presente` é um fato do Censo 2024: `True` quando o `CO_ENTIDADE`
+  tem linha em 2024, `False` quando não tem. A flag só escolhe a frase da
+  ausência; ela não converte matrícula positiva em `nao_aplicavel` e não afirma
+  que a escola é nova (L-63).
+- A licença vai por família em `procedencia.json`: a SEEDF usa `licenca_titulo`
+  e `licenca_url` do conjunto no inventário do CKAN; a INEP usa "público, sem
+  licença declarada no portal", com `licenca_url` nulo. O export falha antes de
+  gravar se uma família SEEDF resolver para ODbL (L-62).
+- `execucao.etapas_puladas` é vazio numa execução completa. Com `--parcial`, o
+  export grava a lista de etapas puladas e o build avisa; sem `--parcial`, uma
+  etapa pulada faz o `06` sair 1 **sem** gravar.
 - O export falha se `data/public/` já existir com `sha256` diferente do que vai
   gravar e o `--force` não for passado: mudança no insumo aparece no diff.
 - `data/public/` é gerado e **commitado** (exceção declarada em `AGENTS.md`).
@@ -251,6 +265,15 @@ Formato do `dados/<CO_ENTIDADE>.json`:
 Onde `n` sai: é a matrícula da etapa de 2025 em `escolas.parquet`; `q16`
 (`data/interim/q16_presenca_escola_etapa.csv`) é o artefato que prova a conta, não
 o insumo do build.
+
+`n` é inteiro ou `null`. É `null` quando a matrícula que serviria de denominador
+não existe; nesse caso a página mostra a matrícula `-` e as taxas da unidade não
+são publicadas; o Ideb, se existir, mantém o valor com `n: null`. `n_referencia`
+só aparece quando o `n` é contagem de alunos e o ano da matrícula usada difere
+do ano do número: hoje, o Ideb de 2005–2023 leva `"n_referencia": "2025"`; o
+Ideb de 2025, matrícula, creche, oferta e infraestrutura não levam o campo.
+Matrícula, creche, oferta e infraestrutura têm `n = 1` (a escola), não uma
+contagem de alunos.
 
 ### 5.3 Interface do build
 
@@ -302,6 +325,12 @@ Medido em 2026-11-06 (1.355 unidades com TDI `valor` ou `zero`):
 número que sustenta D4 = 30: abaixo de 30 o valor extremo é o mais provável, não
 o desempenho.
 
+`67` é o recorte das unidades com TDI `valor` ou `zero` — a matriz de
+`q16_faixas_n.csv`. `80` é o recorte do build: as mesmas unidades mais as 13
+unidades ofertadas que não têm linha de TDI, e que também precisam de supressão
+quando não há denominador. São recortes diferentes; não se somam nem se
+comparam como se fossem o mesmo conjunto.
+
 ## 7. Publicação (D5, D-B)
 
 Repo: `https://github.com/mtsanaissi/prova-dos-nove`. Fonte de publicação por
@@ -335,7 +364,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - run: python scripts/12_build_site.py --public data/public --out site
+      - run: python scripts/12_build_site.py --public data/public --out site --data-build 2026-11-06 --check
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
@@ -354,17 +383,28 @@ Antes do primeiro deploy: ativar Pages em "GitHub Actions" nas configurações d
 repo. Tamanho: 1.291 páginas + o JSON por escola; o limite de site publicado é
 1 GB, e o build mede o total e falha se passar de 700 MB.
 
+**Escopo real do gate.** O passo do workflow roda `--check` e constrói `site/`
+antes do upload. Ele cobre os critérios 1–4 e 6, a metade de build do critério 5
+(idempotência) e os casos de limite. A outra metade do critério 5 — `06` sem
+etapa pulada — continua verificação local, porque `data/interim/` está fora do
+git (`.gitignore`) e o CI não tem como rodar as etapas. O `--check` falha antes
+do upload quando um critério executável regride.
+
 ## 8. Critérios de saída da fase 1
 
-`--check` roda os seis critérios e para no primeiro que falhar. Cada um tem o
-comando manual equivalente, para quando o `--check` discordar de uma pessoa. A
-amostra de 10 páginas é determinística: os 7 perfis do §4 mais as 3 primeiras
-escolas, em ordem de `sha256(co_entidade)`, que não sejam perfis — outra pessoa
-chega às mesmas 10.
+`--check` roda os critérios executáveis e os casos de limite e para no primeiro
+que falhar. Cada um tem o comando manual equivalente, para quando o `--check`
+discordar de uma pessoa. A amostra de 10 páginas é determinística: os 7 perfis
+do §4 mais as 3 primeiras escolas, em ordem de `sha256(co_entidade)`, que não
+sejam perfis — outra pessoa chega às mesmas 10.
 
 **1. Procedência completa.** Todo número visível tem entrada em
 `dados/<CO_ENTIDADE>.json` com `fonte`, `arquivo`, `ano`, `calculo`, `n` e
-`limites` não vazios.
+`limites` não vazios. `n` é inteiro ou `null`; quando é `null`, o número é de
+família cujo n é contagem de alunos e a página mostra a matrícula ausente. Nas
+taxas (fluxo, TDI, TNR), o estado é `ausente`; no Ideb, o valor observado pode
+continuar com `n: null`. `n_referencia` é exigido exatamente quando o n é
+contagem de alunos de outro ano (Ideb de 2005–2023 → `"2025"`).
 
 ```bash
 python scripts/12_build_site.py --public data/public --out site \
@@ -382,7 +422,9 @@ python -c "import json; d=json.load(open('site/indice.json')); \
 ```
 
 **3. n pequeno.** Unidade com `n < --limiar-n` não publica TDI, TNR nem taxa de
-aprovação; publica a matrícula e a nota de amostra pequena.
+aprovação; publica a matrícula e a nota de amostra pequena. Unidade sem
+matrícula de 2025 (`n is None`) também não publica a taxa: mostra a matrícula
+`-` e a frase de 2025.
 
 ```bash
 python scripts/12_build_site.py --public data/public --out site \
@@ -390,15 +432,19 @@ python scripts/12_build_site.py --public data/public --out site \
 ```
 
 **4. Estados.** `ausente` sai `-`, `nao_aplicavel` sai `—`, `zero` sai `0`; os
-três não se confundem em nenhuma página dos perfis, e as seis frases do §3.1
-aparecem como estão, sem variação de redação por escola.
+três não se confundem em nenhuma página dos perfis, e as frases do §3.1 —
+inclusive as duas de matrícula (2024 e 2025), a de escola fora do Censo de 2024
+(L-63) e a de infraestrutura — aparecem como estão, sem variação de redação por
+escola.
 
 ```bash
 python scripts/12_build_site.py --public data/public --out site \
   --data-build 2026-11-06 --check-estados
 ```
 
-**5. Reprodutibilidade.** `06` sem etapa pulada e o build idempotente.
+**5. Reprodutibilidade.** `06` sem etapa pulada (verificação local) e o build
+idempotente (CI). O workflow do Pages cobre a metade do build; a outra metade
+não roda no CI porque `data/interim/` não está no repositório.
 
 ```bash
 python scripts/06_analysis.py                       # sai 0; q0_execucao.csv sem "pulado"
@@ -410,9 +456,20 @@ diff /tmp/site_a.txt /tmp/site_b.txt                # vazio
 ```
 
 **6. Licença.** Nenhum número publicado cita família ODbL como fonte, e
-`creditos.html` traz a licença de cada fonte usada (L-62).
+`creditos.html` traz a licença de cada fonte usada, lida de `procedencia.json`
+(`licenca` e, quando houver, `licenca_url`). O export falha antes de gravar
+quando uma família SEEDF resolve para conjunto ODbL (L-62).
 
 ```bash
 python scripts/12_build_site.py --public data/public --out site \
   --data-build 2026-11-06 --check-licencas
+```
+
+**Casos de limite.** O `--check` também roda a cópia do insumo com 2024 sem
+linha/2024 com célula vazia, 2025 e creche ausentes, o `53014618` com 493 em
+2024 e a renderização a `--limiar-n 0`:
+
+```bash
+python scripts/12_build_site.py --public data/public --out site \
+  --data-build 2026-11-06 --check-casos
 ```

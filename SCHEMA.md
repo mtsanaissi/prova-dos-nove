@@ -26,7 +26,7 @@ O que cada família de fonte pode emitir, medido nos parquets (2026-11-06):
 |---|---|---|
 | Ideb por escola (`ideb_escolas_df`) | `valor`, `ausente` | não emite `zero` nem `nao_aplicavel`: nota zero não existe na escala e a etapa não ofertada simplesmente não tem linha |
 | TDI, TNR e fluxo por escola (`tdi_escolas_df`, `tnr_escolas_df`, `tx_rend_escolas_df`) | `valor`, `zero`, `nao_aplicavel` | não emite `ausente`: a célula vazia da fonte é sempre etapa sem matrícula (`--`) |
-| Censo por escola (`censo_escola_df`) | `valor`, `ausente` | matrícula não declarada é ausência (as 76 escolas de 2024, L-28); `zero` existe quando o campo é 0 |
+| Censo por escola (`censo_escola_df`) | `valor`, `ausente` | matrícula não declarada é ausência: as 76 células vazias de 2024 (L-28) e, em 2025, a célula vazia da escola que existe no arquivo; a escola de 2025 sem linha em 2024 é outra ausência, registrada por `censo_2024_presente = False` (L-63). `zero` existe quando o campo é 0 |
 
 Convenção adotada no código: nulo = `ausente`; `0` = zero; coluna que não existe
 naquele ano = `nao_aplicavel`. Onde a fonte usa `"NULL"`, `"-"` ou `""` como
@@ -38,7 +38,9 @@ publicado), e por isso o texto original é preservado em `valor_bruto` ao lado d
 (rendimento, TDI e TNR) o token é o traço duplo **`'--'`**, que significa **não
 aplicável** — a escola não tem matrícula naquela etapa/série — e entra como
 `estado = 'nao_aplicavel'`. São dois traços, dois significados: um não substitui
-o outro.
+o outro. Na página, as frases fixas são: `a escola não consta do Censo de 2024`
+(L-63), `matrícula não declarada no Censo de 2024` (L-28) e `matrícula não
+declarada no Censo de 2025` (L-28).
 
 ## Modelo de arquivo
 
@@ -617,7 +619,7 @@ Censo declara matrícula maior que zero: a divergência fica visível em
 `oferta_seedf`, não resolvida. Indicador sem linha para uma etapa ofertada entra
 como `ausente`; o estado que veio da fonte é copiado como está (L-59).
 
-## Insumo publicado do site (`data/public/`, 2026-11-07)
+## Insumo publicado do site (`data/public/`, 2026-11-09)
 
 Quatro arquivos gerados por `scripts/06_analysis.py --public data/public` a
 partir de `data/interim/`; nenhum tem microdado ou linha de aluno. O build
@@ -626,10 +628,22 @@ partir de `data/interim/`; nenhum tem microdado ou linha de aluno. O build
 
 | arquivo | grão | colunas | regra |
 |---|---|---|---|
-| `escolas.parquet` | escola (1.291) | `co_entidade`, `nome`, `ra`, `rede`, `rede_cadastro`, `oferta_inf_cre`…`oferta_prof` (8 flags), `mat_inf_cre_2024`…`mat_med_2025` (8 matrículas) | `ra` normalizada por `norm_ra`; `rede` é a categoria do site (`federal`, `estadual`, `privada conveniada`, `privada não conveniada`) e `rede_cadastro` guarda o `Nome Rede` original. Matrícula vem do Censo 2024–2025, nunca da série ODbL da SEEDF (L-62) |
+| `escolas.parquet` | escola (1.291) | `co_entidade`, `nome`, `ra`, `rede`, `rede_cadastro`, `censo_2024_presente`, `oferta_inf_cre`…`oferta_prof` (8 flags), `mat_inf_cre_2024`…`mat_med_2025` (8 matrículas) | `ra` normalizada por `norm_ra`; `rede` é a categoria do site (`federal`, `estadual`, `privada conveniada`, `privada não conveniada`) e `rede_cadastro` guarda o `Nome Rede` original. `censo_2024_presente` é `True` quando o `CO_ENTIDADE` tem linha no Censo 2024 e `False` quando não tem: as 53 escolas de 2025 sem linha ficam com a flag `False` e as quatro matrículas de 2024 nulas; as 3 com linha e células vazias ficam com a flag `True` e as células nulas (L-28, L-63). Matrícula vem do Censo 2024–2025, nunca da série ODbL da SEEDF (L-62) |
 | `indicadores.parquet` | escola × etapa × indicador × ano | `co_entidade`, `etapa` (`AI`/`AF`/`EM`), `indicador` (`ideb_observado`, `tdi`, `tnr`, `aprovacao`, `reprovacao`, `abandono`), `ano`, `valor`, `estado` | só `FUN_AI`, `FUN_AF` e `MED`; `ideb_projetado` fica fora; `estado` é copiado da fonte e nunca deduzido de `NaN` (L-59) |
 | `infraestrutura.parquet` | escola × item (8 itens) | `co_entidade`, `item`, `ano`, `valor` (0/1), `estado` | universo das 927 escolas que oferecem ensino fundamental ou médio; não há linha para as demais, e a página mostra o bloco como `nao_aplicavel` (L-25) |
-| `procedencia.json` | família de indicador | `familia`, `bloco`, `fonte`, `arquivo`, `anos`, `calculo`, `limites`; topo com `sha256` dos três parquets | uma família por bloco do contrato; o build usa a fonte e os limites daqui |
+| `procedencia.json` | família de indicador | `familia`, `bloco`, `fonte`, `arquivo`, `anos`, `calculo`, `limites`, `licenca`, `licenca_url`; topo com `sha256` dos três parquets e `execucao.etapas_puladas` | uma família por bloco do contrato; o build usa fonte, limites e licença daqui. A licença SEEDF vem de `license_title`/`license_url` do conjunto no inventário do CKAN; a INEP declara "público, sem licença declarada no portal", com URL nula. O export falha antes de gravar se uma família SEEDF resolver para ODbL (L-62). `execucao.etapas_puladas` é vazio na execução completa e só é preenchido com `--parcial` |
+
+Tamanhos medidos em 2026-11-09: `escolas.parquet` 61 KB, `indicadores.parquet`
+40 KB, `infraestrutura.parquet` 13 KB e `procedencia.json` 4.7 KB.
+
+No `site/dados/<CO_ENTIDADE>.json`, cada número traz `n` inteiro ou `null`.
+`n = null` ocorre quando a matrícula que serviria de denominador não existe
+(famílias Ideb, fluxo, TDI e TNR); nas taxas o número é `ausente`, e o Ideb, se
+existir, mantém o valor observado com `n: null`. A página mostra a matrícula `-`.
+`n_referencia` só aparece quando o `n` é contagem de alunos de outro ano: o Ideb
+de 2005–2023 leva `"n_referencia": "2025"`; Ideb de 2025, matrícula, creche,
+oferta e infraestrutura não levam o campo. O `n = 1` dessas quatro últimas
+famílias é a escola, não uma contagem de alunos.
 
 O export é determinístico e idempotente. Se o destino já tem um arquivo com
 sha256 diferente do que seria gravado, ele falha; `--force` sobrescreve e a
