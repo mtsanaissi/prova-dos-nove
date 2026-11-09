@@ -1,0 +1,160 @@
+{
+  "registros": [
+    {
+      "anos": [
+        "2025"
+      ],
+      "arquivo": "data/public/escolas.parquet",
+      "bloco": 1,
+      "calculo": "cópia dos campos NO_ENTIDADE, Nome RA e Nome Rede do cadastro",
+      "familia": "identificacao",
+      "fonte": "SEEDF — Cadastro de Unidades Escolares 2025",
+      "limites": [
+        "L-36",
+        "L-37"
+      ]
+    },
+    {
+      "anos": [
+        "2025"
+      ],
+      "arquivo": "data/public/escolas.parquet",
+      "bloco": 2,
+      "calculo": "sinalizador 1 = oferta da etapa; 0 = não oferta; não traduzir 'é EI'",
+      "familia": "oferta",
+      "fonte": "SEEDF — Cadastro de Unidades Escolares 2025",
+      "limites": [
+        "L-57",
+        "L-36"
+      ]
+    },
+    {
+      "anos": [
+        "2024",
+        "2025"
+      ],
+      "arquivo": "data/public/escolas.parquet",
+      "bloco": 3,
+      "calculo": "matrícula da etapa por escola, como está no campo do Censo",
+      "familia": "matricula",
+      "fonte": "INEP — Censo Escolar 2024–2025",
+      "limites": [
+        "L-28",
+        "L-43",
+        "L-48",
+        "L-62"
+      ]
+    },
+    {
+      "anos": [
+        "2005",
+        "2007",
+        "2009",
+        "2011",
+        "2013",
+        "2015",
+        "2017",
+        "2019",
+        "2021",
+        "2023",
+        "2025"
+      ],
+      "arquivo": "data/public/indicadores.parquet",
+      "bloco": 4,
+      "calculo": "valor observado da etapa, como publicado; a meta projetada não entra",
+      "familia": "ideb",
+      "fonte": "INEP — Ideb por Escola 2005–2025",
+      "limites": [
+        "L-08",
+        "L-12",
+        "L-30",
+        "L-33",
+        "L-56"
+      ]
+    },
+    {
+      "anos": [
+        "2025"
+      ],
+      "arquivo": "data/public/indicadores.parquet",
+      "bloco": 5,
+      "calculo": "percentual da etapa, como publicado",
+      "familia": "fluxo",
+      "fonte": "INEP — Taxas de Rendimento por Escola 2025",
+      "limites": [
+        "L-11",
+        "L-59",
+        "L-21",
+        "D4"
+      ]
+    },
+    {
+      "anos": [
+        "2025"
+      ],
+      "arquivo": "data/public/indicadores.parquet",
+      "bloco": 6,
+      "calculo": "percentual da etapa, como publicado",
+      "familia": "tdi",
+      "fonte": "INEP — Distorção Idade-Série por Escola 2025",
+      "limites": [
+        "L-11",
+        "L-59",
+        "L-40",
+        "D4"
+      ]
+    },
+    {
+      "anos": [
+        "2025"
+      ],
+      "arquivo": "data/public/indicadores.parquet",
+      "bloco": 7,
+      "calculo": "percentual da etapa, como publicado",
+      "familia": "tnr",
+      "fonte": "INEP — Taxa de Não-Resposta por Escola 2025",
+      "limites": [
+        "L-09",
+        "L-11",
+        "L-59"
+      ]
+    },
+    {
+      "anos": [
+        "2025"
+      ],
+      "arquivo": "data/public/infraestrutura.parquet",
+      "bloco": 8,
+      "calculo": "presença do item declarada pela escola",
+      "familia": "infraestrutura",
+      "fonte": "SEEDF — Infraestrutura Escolar 2025",
+      "limites": [
+        "L-25",
+        "L-29",
+        "L-38",
+        "L-51"
+      ]
+    },
+    {
+      "anos": [
+        "2024",
+        "2025"
+      ],
+      "arquivo": "data/public/escolas.parquet",
+      "bloco": 9,
+      "calculo": "matrícula em creche da escola, como está no campo do Censo",
+      "familia": "creche",
+      "fonte": "INEP — Censo Escolar 2024–2025",
+      "limites": [
+        "L-27",
+        "L-28",
+        "L-62"
+      ]
+    }
+  ],
+  "sha256": {
+    "escolas.parquet": "b4652dbee18c87fb1c0eb8f454cdcf139189d41113ac27a789c875ead17174ef",
+    "indicadores.parquet": "b7b6937ca5b5b1d2eeabc9ca280c517199e2a918f0227a341936f99dbc14e1cb",
+    "infraestrutura.parquet": "dd53b3a8b8d9c6517e0ebce39662ab9f5ff98426186a25491eb9a0aa790bf722"
+  }
+}

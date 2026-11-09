@@ -616,3 +616,22 @@ A etapa entra na matriz quando o vetor de oferta da SEEDF diz 1 **ou** quando o
 Censo declara matrícula maior que zero: a divergência fica visível em
 `oferta_seedf`, não resolvida. Indicador sem linha para uma etapa ofertada entra
 como `ausente`; o estado que veio da fonte é copiado como está (L-59).
+
+## Insumo publicado do site (`data/public/`, 2026-11-07)
+
+Quatro arquivos gerados por `scripts/06_analysis.py --public data/public` a
+partir de `data/interim/`; nenhum tem microdado ou linha de aluno. O build
+`scripts/12_build_site.py` lê **só** esta pasta e confere o sha256 registrado em
+`procedencia.json`.
+
+| arquivo | grão | colunas | regra |
+|---|---|---|---|
+| `escolas.parquet` | escola (1.291) | `co_entidade`, `nome`, `ra`, `rede`, `rede_cadastro`, `oferta_inf_cre`…`oferta_prof` (8 flags), `mat_inf_cre_2024`…`mat_med_2025` (8 matrículas) | `ra` normalizada por `norm_ra`; `rede` é a categoria do site (`federal`, `estadual`, `privada conveniada`, `privada não conveniada`) e `rede_cadastro` guarda o `Nome Rede` original. Matrícula vem do Censo 2024–2025, nunca da série ODbL da SEEDF (L-62) |
+| `indicadores.parquet` | escola × etapa × indicador × ano | `co_entidade`, `etapa` (`AI`/`AF`/`EM`), `indicador` (`ideb_observado`, `tdi`, `tnr`, `aprovacao`, `reprovacao`, `abandono`), `ano`, `valor`, `estado` | só `FUN_AI`, `FUN_AF` e `MED`; `ideb_projetado` fica fora; `estado` é copiado da fonte e nunca deduzido de `NaN` (L-59) |
+| `infraestrutura.parquet` | escola × item (8 itens) | `co_entidade`, `item`, `ano`, `valor` (0/1), `estado` | universo das 927 escolas que oferecem ensino fundamental ou médio; não há linha para as demais, e a página mostra o bloco como `nao_aplicavel` (L-25) |
+| `procedencia.json` | família de indicador | `familia`, `bloco`, `fonte`, `arquivo`, `anos`, `calculo`, `limites`; topo com `sha256` dos três parquets | uma família por bloco do contrato; o build usa a fonte e os limites daqui |
+
+O export é determinístico e idempotente. Se o destino já tem um arquivo com
+sha256 diferente do que seria gravado, ele falha; `--force` sobrescreve e a
+mudança aparece no diff. O build não usa `datetime.now()`: o único carimbo é
+`--data-build`.

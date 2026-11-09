@@ -10,8 +10,12 @@ Saída:   `data/interim/q1_unidades.csv` ... `q8_conferencia_seedf.csv`,
          `q15_conferencia_censo.csv`, os três `q3_biblioteca*.csv` e um log com
          os números que vão para o REPORT.md. Também
          `q16_presenca_escola_etapa.csv` e `q16_faixas_n.csv` (matriz de presença
-         escola × etapa) e `q0_execucao.csv` (executado|pulado por etapa).
-Idempotente: sim — leitura e reescrita das saídas.
+         escola × etapa) e `q0_execucao.csv` (executado|pulado por etapa). Com
+         `--public DIR`, grava também o insumo versionado do site
+         (`escolas.parquet`, `indicadores.parquet`, `infraestrutura.parquet` e
+         `procedencia.json`).
+Idempotente: sim — leitura e reescrita das saídas; o insumo público só é
+sobrescrito com `--force` quando o sha256 do destino difere.
 
 Regra de leitura: nulo é ausente, `0` é zero. Nunca se soma nulo como zero.
 
@@ -21,9 +25,12 @@ se alguma pulou; `--parcial` aceita o resultado incompleto e sai com 0.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pandas as pd
 
-from _common import INTERIM, norm_ra
+from _common import INTERIM, norm_ra, sha256
 
 S = INTERIM / "seedf"
 class Pulado(Exception):
@@ -1868,6 +1875,368 @@ def q16() -> None:
           f"{u[u['matriculas_censo_2025'] < 50]['co_entidade'].nunique():,} escolas")
 
 
+# ---------------------------------------------------------------- insumo público
+# O recorte que o build do site lê. O grão e as colunas são o contrato de
+# `docs/FASE-1.md` §5.1; nada aqui é microdado e nenhuma linha identifica aluno.
+
+REDE_SITE = {
+    "REDE PÚBLICA FEDERAL": "federal",
+    "REDE PÚBLICA ESTADUAL VINCULADA À SEEDF": "estadual",
+    "REDE PÚBLICA ESTADUAL NÃO VINCULADA À SE": "estadual",
+    "REDE PARTICULAR CONVENIADA": "privada conveniada",
+    "REDE PARTICULAR NÃO CONVENIADA": "privada não conveniada",
+}
+
+ETAPAS_PUBLICAS = [
+    ("AI", "anos iniciais", "FUND_AI", "QT_MAT_FUND_AI", "oferta_fund_ai", "mat_fund_ai"),
+    ("AF", "anos finais", "FUND_AF", "QT_MAT_FUND_AF", "oferta_fund_af", "mat_fund_af"),
+    ("EM", "ensino médio", "MED", "QT_MAT_MED", "oferta_med", "mat_med"),
+]
+
+INFRA_ITENS = [
+    "IN_BIBLIOTECA",
+    "IN_SALA_LEITURA",
+    "IN_QUADRA_ESPORTES",
+    "IN_LABORATORIO_INFORMATICA",
+    "IN_LABORATORIO_CIENCIAS",
+    "IN_INTERNET_ALUNOS",
+    "IN_REFEITORIO",
+    "IN_BANHEIRO_PNE",
+]
+
+ANOS_IDEB = [str(ano) for ano in range(2005, 2026, 2)]
+
+REGISTROS_PUBLICOS = [
+    {
+        "familia": "identificacao",
+        "bloco": 1,
+        "fonte": "SEEDF — Cadastro de Unidades Escolares 2025",
+        "arquivo": "data/public/escolas.parquet",
+        "anos": ["2025"],
+        "calculo": "cópia dos campos NO_ENTIDADE, Nome RA e Nome Rede do cadastro",
+        "limites": ["L-36", "L-37"],
+    },
+    {
+        "familia": "oferta",
+        "bloco": 2,
+        "fonte": "SEEDF — Cadastro de Unidades Escolares 2025",
+        "arquivo": "data/public/escolas.parquet",
+        "anos": ["2025"],
+        "calculo": "sinalizador 1 = oferta da etapa; 0 = não oferta; não traduzir 'é EI'",
+        "limites": ["L-57", "L-36"],
+    },
+    {
+        "familia": "matricula",
+        "bloco": 3,
+        "fonte": "INEP — Censo Escolar 2024–2025",
+        "arquivo": "data/public/escolas.parquet",
+        "anos": ["2024", "2025"],
+        "calculo": "matrícula da etapa por escola, como está no campo do Censo",
+        "limites": ["L-28", "L-43", "L-48", "L-62"],
+    },
+    {
+        "familia": "ideb",
+        "bloco": 4,
+        "fonte": "INEP — Ideb por Escola 2005–2025",
+        "arquivo": "data/public/indicadores.parquet",
+        "anos": ANOS_IDEB,
+        "calculo": "valor observado da etapa, como publicado; a meta projetada não entra",
+        "limites": ["L-08", "L-12", "L-30", "L-33", "L-56"],
+    },
+    {
+        "familia": "fluxo",
+        "bloco": 5,
+        "fonte": "INEP — Taxas de Rendimento por Escola 2025",
+        "arquivo": "data/public/indicadores.parquet",
+        "anos": ["2025"],
+        "calculo": "percentual da etapa, como publicado",
+        "limites": ["L-11", "L-59", "L-21", "D4"],
+    },
+    {
+        "familia": "tdi",
+        "bloco": 6,
+        "fonte": "INEP — Distorção Idade-Série por Escola 2025",
+        "arquivo": "data/public/indicadores.parquet",
+        "anos": ["2025"],
+        "calculo": "percentual da etapa, como publicado",
+        "limites": ["L-11", "L-59", "L-40", "D4"],
+    },
+    {
+        "familia": "tnr",
+        "bloco": 7,
+        "fonte": "INEP — Taxa de Não-Resposta por Escola 2025",
+        "arquivo": "data/public/indicadores.parquet",
+        "anos": ["2025"],
+        "calculo": "percentual da etapa, como publicado",
+        "limites": ["L-09", "L-11", "L-59"],
+    },
+    {
+        "familia": "infraestrutura",
+        "bloco": 8,
+        "fonte": "SEEDF — Infraestrutura Escolar 2025",
+        "arquivo": "data/public/infraestrutura.parquet",
+        "anos": ["2025"],
+        "calculo": "presença do item declarada pela escola",
+        "limites": ["L-25", "L-29", "L-38", "L-51"],
+    },
+    {
+        "familia": "creche",
+        "bloco": 9,
+        "fonte": "INEP — Censo Escolar 2024–2025",
+        "arquivo": "data/public/escolas.parquet",
+        "anos": ["2024", "2025"],
+        "calculo": "matrícula em creche da escola, como está no campo do Censo",
+        "limites": ["L-27", "L-28", "L-62"],
+    },
+]
+
+
+class ExportError(Exception):
+    """O insumo público não pode ser gravado sem intervenção explícita."""
+
+
+def _escolas_publicas() -> pd.DataFrame:
+    """Monta o grão escola do insumo público, na ordem de `CO_ENTIDADE`."""
+    e = pd.read_parquet(S / "escolas__relatorio_escolas_2025.parquet").copy()
+    e["co_entidade"] = e["CO_ENTIDADE"].astype(str).str.strip()
+    e["nome"] = e["Nome da escola"].astype(str).str.strip()
+    e["rede_cadastro"] = e["Nome Rede"].astype(str).str.strip()
+    e["rede"] = e["rede_cadastro"].map(REDE_SITE)
+    if e["rede"].isna().any():
+        faltantes = sorted(e.loc[e["rede"].isna(), "rede_cadastro"].unique())
+        raise ExportError(f"rede sem mapa para o site: {faltantes}")
+    e["ra"] = e["Nome RA"].map(lambda valor: norm_ra(valor) if pd.notna(valor) else "")
+
+    for _, _, oferta_col, _, oferta_site, _ in ETAPAS_PUBLICAS:
+        e[oferta_site] = pd.to_numeric(e[oferta_col], errors="coerce").fillna(0).astype("Int64")
+    for coluna, destino in [
+        ("INF_CRE", "oferta_inf_cre"),
+        ("INF_PRE", "oferta_inf_pre"),
+        ("EJA", "oferta_eja"),
+        ("ESP", "oferta_esp"),
+        ("PROF", "oferta_prof"),
+    ]:
+        e[destino] = pd.to_numeric(e[coluna], errors="coerce").fillna(0).astype("Int64")
+
+    censo = pd.read_parquet(INTERIM / "inep" / "censo_escola_df.parquet")
+    censo["CO_ENTIDADE"] = censo["CO_ENTIDADE"].astype(str).str.strip()
+    for ano, coluna_censo, destino in [
+        (2024, "QT_MAT_INF_CRE", "mat_inf_cre_2024"),
+        (2024, "QT_MAT_FUND_AI", "mat_fund_ai_2024"),
+        (2024, "QT_MAT_FUND_AF", "mat_fund_af_2024"),
+        (2024, "QT_MAT_MED", "mat_med_2024"),
+        (2025, "QT_MAT_INF_CRE", "mat_inf_cre_2025"),
+        (2025, "QT_MAT_FUND_AI", "mat_fund_ai_2025"),
+        (2025, "QT_MAT_FUND_AF", "mat_fund_af_2025"),
+        (2025, "QT_MAT_MED", "mat_med_2025"),
+    ]:
+        recorte = censo[censo["ano"] == ano].set_index("CO_ENTIDADE")
+        if recorte.index.duplicated().any():
+            raise ExportError(f"Censo {ano} tem CO_ENTIDADE duplicado")
+        e[destino] = pd.array(
+            recorte[coluna_censo].reindex(e["co_entidade"]).to_numpy(), dtype="Int64"
+        )
+
+    colunas = [
+        "co_entidade", "nome", "ra", "rede", "rede_cadastro",
+        "oferta_inf_cre", "oferta_inf_pre", "oferta_fund_ai", "oferta_fund_af",
+        "oferta_med", "oferta_eja", "oferta_esp", "oferta_prof",
+        "mat_inf_cre_2024", "mat_fund_ai_2024", "mat_fund_af_2024", "mat_med_2024",
+        "mat_inf_cre_2025", "mat_fund_ai_2025", "mat_fund_af_2025", "mat_med_2025",
+    ]
+    return e[colunas].sort_values("co_entidade", kind="mergesort").reset_index(drop=True)
+
+
+def _indicadores_publicos(escolas: pd.DataFrame) -> pd.DataFrame:
+    """Monta o grão escola × etapa × indicador × ano do insumo público."""
+    codigos = set(escolas["co_entidade"])
+    linhas: list[dict] = []
+
+    ideb = pd.read_parquet(INTERIM / "inep" / "ideb_escolas_df.parquet")
+    ideb = ideb[
+        (ideb["indicador"] == "ideb_observado")
+        & (ideb["etapa"].isin(["AI", "AF", "EM"]))
+        & (ideb["ID_ESCOLA"].astype(str).str.strip().isin(codigos))
+    ]
+    for r in ideb.itertuples():
+        linhas.append(
+            {
+                "co_entidade": str(r.ID_ESCOLA).strip(),
+                "etapa": r.etapa,
+                "indicador": "ideb_observado",
+                "ano": str(r.ano),
+                "valor": r.valor,
+                "estado": r.estado,
+            }
+        )
+
+    for familia, arquivo in [
+        ("tdi", "tdi_escolas_df.parquet"),
+        ("tnr", "tnr_escolas_df.parquet"),
+    ]:
+        d = pd.read_parquet(INTERIM / "inep" / arquivo)
+        d = d[(d["NU_ANO_CENSO"] == "2025") & (d["recorte"].isin(["FUN_AI", "FUN_AF", "MED"]))]
+        d["CO_ENTIDADE"] = d["CO_ENTIDADE"].astype(str).str.strip()
+        d = d[d["CO_ENTIDADE"].isin(codigos)]
+        for r in d.itertuples():
+            linhas.append(
+                {
+                    "co_entidade": r.CO_ENTIDADE,
+                    "etapa": {"FUN_AI": "AI", "FUN_AF": "AF", "MED": "EM"}[r.recorte],
+                    "indicador": familia,
+                    "ano": "2025",
+                    "valor": r.valor,
+                    "estado": r.estado,
+                }
+            )
+
+    tx = pd.read_parquet(INTERIM / "inep" / "tx_rend_escolas_df.parquet")
+    tx = tx[(tx["NU_ANO_CENSO"] == "2025") & (tx["recorte"].isin(["FUN_AI", "FUN_AF", "MED"]))]
+    tx["CO_ENTIDADE"] = tx["CO_ENTIDADE"].astype(str).str.strip()
+    tx = tx[tx["CO_ENTIDADE"].isin(codigos)]
+    for r in tx.itertuples():
+        linhas.append(
+            {
+                "co_entidade": r.CO_ENTIDADE,
+                "etapa": {"FUN_AI": "AI", "FUN_AF": "AF", "MED": "EM"}[r.recorte],
+                "indicador": r.categoria,
+                "ano": "2025",
+                "valor": r.valor,
+                "estado": r.estado,
+            }
+        )
+
+    etapa_ordem = {"AI": 0, "AF": 1, "EM": 2}
+    indicador_ordem = {
+        "ideb_observado": 0,
+        "tdi": 1,
+        "tnr": 2,
+        "aprovacao": 3,
+        "reprovacao": 4,
+        "abandono": 5,
+    }
+    linhas.sort(
+        key=lambda r: (
+            r["co_entidade"],
+            indicador_ordem[r["indicador"]],
+            etapa_ordem[r["etapa"]],
+            r["ano"],
+        )
+    )
+    return pd.DataFrame(
+        linhas,
+        columns=["co_entidade", "etapa", "indicador", "ano", "valor", "estado"],
+    )
+
+
+def _infraestrutura_publica(escolas: pd.DataFrame) -> pd.DataFrame:
+    """Monta o grão escola × item (8 itens publicados) do insumo público.
+
+    O universo é o das escolas que oferecem ensino fundamental ou médio (927 em
+    2025), o mesmo da tabela de `docs/FASE-1.md` §2. Para as demais, o bloco é
+    `nao_aplicavel`: laboratório, quadra e biblioteca não são exigência da
+    educação infantil (L-25).
+    """
+    inf = pd.read_parquet(S / "infraestrutura__relatorio_infraestrutura_2025.parquet")
+    inf["CO_ENTIDADE"] = inf["CO_ENTIDADE"].astype(str).str.strip()
+    mapa = inf.set_index("CO_ENTIDADE")
+    universo = escolas[
+        (escolas["oferta_fund_ai"] == 1)
+        | (escolas["oferta_fund_af"] == 1)
+        | (escolas["oferta_med"] == 1)
+    ]
+    linhas = []
+    for co in universo["co_entidade"]:
+        for item in INFRA_ITENS:
+            bruto = mapa.at[co, item] if co in mapa.index else None
+            if bruto is None or pd.isna(bruto):
+                linhas.append(
+                    {"co_entidade": co, "item": item, "ano": "2025", "valor": None, "estado": "ausente"}
+                )
+            else:
+                linhas.append(
+                    {
+                        "co_entidade": co,
+                        "item": item,
+                        "ano": "2025",
+                        "valor": int(bruto),
+                        "estado": "valor",
+                    }
+                )
+    return pd.DataFrame(linhas, columns=["co_entidade", "item", "ano", "valor", "estado"])
+
+
+def _grava_parquets(destino: Path, escolas: pd.DataFrame, indicadores: pd.DataFrame, infra: pd.DataFrame) -> dict[str, str]:
+    """Grava os três parquets e devolve o sha256 de cada um."""
+    escolas.to_parquet(destino / "escolas.parquet", index=False)
+    indicadores.to_parquet(destino / "indicadores.parquet", index=False)
+    infra.to_parquet(destino / "infraestrutura.parquet", index=False)
+    return {
+        nome: sha256(destino / nome)
+        for nome in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet")
+    }
+
+
+def export_public(dest: Path, force: bool = False) -> dict[str, int]:
+    """Exporta `data/public/` a partir de `data/interim/`.
+
+    Entrada: parquets de `data/interim/seedf/` e `data/interim/inep/`.
+    Saída:   `dest/escolas.parquet`, `dest/indicadores.parquet`,
+             `dest/infraestrutura.parquet` e `dest/procedencia.json`.
+    Idempotente: sim — o mesmo insumo produz os mesmos bytes. Se `dest` já tem
+    um arquivo com sha256 diferente do que seria gravado, a exportação falha e
+    só sobrescreve com `force=True`, para que mudança no insumo apareça no diff.
+    """
+    import tempfile
+
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    escolas = _escolas_publicas()
+    indicadores = _indicadores_publicos(escolas)
+    infra = _infraestrutura_publica(escolas)
+
+    with tempfile.TemporaryDirectory(prefix=".public-", dir=dest.parent) as tmp:
+        tmp = Path(tmp)
+        hashes = _grava_parquets(tmp, escolas, indicadores, infra)
+        procedencia = {"sha256": hashes, "registros": REGISTROS_PUBLICOS}
+        (tmp / "procedencia.json").write_text(
+            json.dumps(procedencia, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        novos = {
+            nome: sha256(tmp / nome)
+            for nome in (
+                "escolas.parquet",
+                "indicadores.parquet",
+                "infraestrutura.parquet",
+                "procedencia.json",
+            )
+        }
+        diferentes = [
+            nome
+            for nome, digest in novos.items()
+            if (dest / nome).exists() and sha256(dest / nome) != digest
+        ]
+        if diferentes and not force:
+            raise ExportError(
+                f"{dest} já existe com conteúdo diferente em "
+                + ", ".join(diferentes)
+                + "; rode com --force para sobrescrever (a mudança aparece no diff)"
+            )
+
+        dest.mkdir(parents=True, exist_ok=True)
+        for nome in novos:
+            (tmp / nome).replace(dest / nome)
+
+        return {
+            "escolas": len(escolas),
+            "indicadores": len(indicadores),
+            "infraestrutura": len(infra),
+        }
+
+
 ETAPAS = [
     ("q1", q1), ("q2", q2), ("q3", q3), ("q4", q4), ("q5", q5), ("q6", q6),
     ("q7", q7), ("q8", q8), ("q9", q9), ("q10", q10), ("q11", q11), ("q12", q12),
@@ -1891,7 +2260,20 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="aceita etapa pulada e sai com zero; sem a flag, etapa pulada faz sair com 1",
     )
+    ap.add_argument(
+        "--public",
+        type=Path,
+        metavar="DIR",
+        help="exporta o recorte versionado que o build do site lê (ex.: data/public)",
+    )
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="sobrescreve --public mesmo quando o sha256 do destino difere",
+    )
     args = ap.parse_args(argv)
+    if args.force and not args.public:
+        ap.error("--force só faz sentido com --public")
 
     execucao = []
     for nome, funcao in ETAPAS:
@@ -1914,6 +2296,19 @@ def main(argv: list[str] | None = None) -> int:
     registro = pd.DataFrame(execucao)
     registro.to_csv(INTERIM / "q0_execucao.csv", index=False)
     print("\n== execução: " + "; ".join(f"{r.etapa}={r.status}" for r in registro.itertuples()))
+
+    if args.public:
+        try:
+            resumo = export_public(args.public, force=args.force)
+        except ExportError as exc:
+            print(f"\n== EXPORTAÇÃO PÚBLICA FALHOU: {exc}")
+            return 1
+        print(
+            "\n== insumo público: "
+            f"{resumo['escolas']:,} escolas, {resumo['indicadores']:,} linhas de indicador, "
+            f"{resumo['infraestrutura']:,} linhas de infraestrutura em {args.public}"
+        )
+
     puladas = registro[registro["status"] == "pulado"]
     if len(puladas) and not args.parcial:
         print(

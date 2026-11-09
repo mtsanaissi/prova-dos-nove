@@ -108,8 +108,19 @@ agora têm versão ponderada pela matrícula, o resíduo de 11,6 mil crianças n
 creche foi explicado (era convenção de idade, não oferta faltando) e a série de
 matrículas da SEEDF foi conferida valor a valor contra a INEP. A etapa não está
 completa: falta o Ideb por escola das escolas privadas, que a INEP não publica
-depois de 2017 (`REPORT.md` §5). Ainda não há produto: há inventário, dicionário
-de dados e as respostas que os dados já permitem.
+depois de 2017 (`REPORT.md` §5). Naquele momento ainda não havia produto: havia
+inventário, dicionário de dados e as respostas que os dados já permitem.
+
+**Build da fase 1 — página por escola (2026-11-07).** O contrato está em
+[`docs/FASE-1.md`](docs/FASE-1.md) e o build em `scripts/12_build_site.py`.
+`06_analysis.py --public data/public` exporta o recorte versionado (1.291
+escolas, indicadores com `estado` e infraestrutura das 927 escolas de EF/EM) e
+o build gera `site/`: índice alfabético sem número, uma página por escola, a
+procedência de cada número em `site/dados/<CO_ENTIDADE>.json` e as páginas
+`como-ler.html` e `creditos.html`. O workflow
+`.github/workflows/pages.yml` publica o resultado no GitHub Pages; antes do
+primeiro deploy, é preciso ativar Pages em "GitHub Actions" nas configurações do
+repositório. O site não é versionado; o insumo `data/public/` é.
 
 Fontes baixadas e verificadas, todas com sha256 no `MANIFEST.md` (146 linhas):
 80 arquivos da SEEDF (458 MB), 53 da PDAD-A (100 MB — 50 relatórios, dois
@@ -249,6 +260,7 @@ sobre um universo restrito às escolas que ofertam fundamental/médio).
 │   ├── interim/            # normalizados e respostas (fora do git)
 │   └── public/             # recorte mínimo que o build lê (dentro do git)
 ├── site/                   # build estático (fora do git; ver docs/FASE-1.md)
+├── .github/workflows/      # pages.yml: publicação do site no GitHub Pages
 └── scripts/
     ├── _common.py             # download, hash, detecção de formato, MANIFEST
     ├── 01_inventory_seedf.py  # enumera o CKAN da SEEDF
@@ -261,7 +273,8 @@ sobre um universo restrito às escolas que ofertam fundamental/médio).
     ├── 08_profile_inep.py     # perfila e normaliza o que a INEP entrega
     ├── 09_download_malha.py   # malha das RAs (IDE/DF), só validação por atributo
     ├── 10_ingest_pdad.py      # microdados da PDAD-A: agregados por RA
-    └── 11_ingest_censo.py     # recorte do DF dos microdados do Censo Escolar
+    ├── 11_ingest_censo.py     # recorte do DF dos microdados do Censo Escolar
+    └── 12_build_site.py       # build estático da página por escola (FASE-1)
 ```
 
 ## Como rodar
@@ -289,6 +302,13 @@ uv pip install -r requirements.txt
 .venv/bin/python scripts/03_profile_seedf.py         # parquet + perfil de colunas
 .venv/bin/python scripts/04_crosswalk.py             # taxa de casamento das chaves
 .venv/bin/python scripts/06_analysis.py              # números do REPORT.md
+.venv/bin/python scripts/06_analysis.py --public data/public  # insumo do site
+
+# site: só data/public/, sem rede
+.venv/bin/python scripts/12_build_site.py --public data/public --out site \
+  --data-build 2026-11-06
+.venv/bin/python scripts/12_build_site.py --public data/public --out site \
+  --data-build 2026-11-06 --check
 ```
 
 `06` é o último: lê o parquet do `11`, os agregados do `10` e o perfil do `03`.
