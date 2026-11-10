@@ -32,7 +32,7 @@ The split is cheap and safe here because the build is deterministic: the contrac
 `datetime.now()` and fixes iteration order, and `check_reproducibility` already compares two builds.
 "No behavior change" is therefore a byte comparison of `site/`, not a judgment call.
 
-## 2. Current state (HEAD `05fc4dc`; use symbols, not line numbers, after the first commit)
+## 2. Current state (script as of `05fc4dc`, unchanged at HEAD `52fd638`; use symbols, not line numbers, after the first commit)
 
 | Responsibility | Symbols | Lines |
 |---|---|---:|
@@ -62,13 +62,18 @@ Facts that constrain the design:
 
 ## 3. Decisions
 
-### D1 — package `scripts/sitegen/`; `12_build_site.py` stays as a thin CLI
+### D1 — package `scripts/sitegen/`; `12_build_site.py` stays as a thin shim
 
 **Decision.** A sibling package `scripts/sitegen/`. `12_build_site.py` keeps its name (run-order
-numbering, CI, docs), its docstring and `main`, and imports from `sitegen`.
+numbering, CI, docs) and its docstring. Until step 5 it also keeps `main`; from step 5 `main` lives
+in `sitegen/cli.py` and the script is a shim: docstring, `from sitegen.cli import main`, and the
+`if __name__ == "__main__"` guard (about 30 lines).
 
 **Why.** Same pattern as `_common.py`; no CI, README or FASE-1 command changes. `sitegen` cannot
-collide with the ignored `site/`.
+collide with the ignored `site/`. Moving `main` out keeps every top-level symbol of the old file in
+the package at the end, so the move check (§8) has one search root per step instead of an exception
+list, and the script no longer carries 60 lines of argument parsing under its docstring. `--help` is
+unaffected: argparse takes `prog` from `sys.argv[0]`, which is still `12_build_site.py`.
 
 **Rejected.** `scripts/build/` (ambiguous with build artifacts); a top-level `src/` (new project
 layout for one script); renaming the CLI (breaks CI, docs and the worklogs' commands). Do not run
@@ -78,7 +83,7 @@ the build with `-I` or `-P`: both drop `scripts/` from `sys.path`.
 
 **Decision.** Every step passes gate G (§7): same `--check` output lines, same sha256 for every file
 in `site/`, same `--help`, `data/public` untouched. The only exceptions are the deliberate edits
-named per step (the registry in `main`, `render` → `_block_*`, the assets); each is covered by the
+named per step (the registry and `cli.py`, `render` → `_block_*`, the assets); each is covered by the
 same byte gate.
 
 **Why.** It converts "did the refactor break anything" into a diff that is empty or not.
@@ -139,7 +144,8 @@ no gain to a reader of the code); English CSS classes (changes every page's byte
 ### D5 — checks become a registry
 
 **Decision.** `sitegen/checks/__init__.py` defines `CheckContext` and `Check` (frozen dataclasses)
-and an ordered tuple `CHECKS`. `main` builds the `--check-*` flags and the `--check` list from it.
+and an ordered tuple `CHECKS`. `sitegen/cli.py::main` builds the `--check-*` flags and the `--check`
+list from it.
 
 ```python
 @dataclass(frozen=True)
@@ -154,23 +160,30 @@ class Check:
     run: Callable[[CheckContext], str]
 ```
 
-| key | flag | function (module) |
+The seven check functions keep their **original signatures and bodies**; they do not know about
+`CheckContext` and their modules never import it. Each `CHECKS` entry adapts one with a lambda in
+`checks/__init__.py`:
+
+| key | flag | `run=lambda ctx: …` (module) |
 |---|---|---|
-| `procedencia` | `--check-procedencia` | `check_provenance` (`provenance`) |
-| `ranking` | — | `check_no_ranking` (`ranking`) |
-| `limiar` | `--check-limiar` | `check_threshold` (`threshold`) |
-| `estados` | `--check-estados` | `check_states` (`states`) |
-| `reprodutibilidade` | — | `check_reproducibility` (`reproducibility`) |
-| `licencas` | `--check-licencas` | `check_licenses` (`licenses`) |
-| `casos_limite` | `--check-casos` | `check_edge_cases` (`edge_cases`) |
+| `procedencia` | `--check-procedencia` | `check_provenance(ctx.out, ctx.data, ctx.data_build)` (`provenance`) |
+| `ranking` | — | `check_no_ranking(ctx.out)` (`ranking`) |
+| `limiar` | `--check-limiar` | `check_threshold(ctx.out, ctx.data, ctx.threshold)` (`threshold`) |
+| `estados` | `--check-estados` | `check_states(ctx.out, ctx.data, ctx.threshold)` (`states`) |
+| `reprodutibilidade` | — | `check_reproducibility(ctx.public, ctx.out, ctx.data_build, ctx.threshold)` (`reproducibility`) |
+| `licencas` | `--check-licencas` | `check_licenses(ctx.out, ctx.data)` (`licenses`) |
+| `casos_limite` | `--check-casos` | `check_edge_cases(ctx.public, ctx.data_build)` (`edge_cases`) |
 
 The tuple order is today's `--check` order. `help` strings are copied verbatim from the current
 `add_argument` calls. Stop-at-first-failure and the `[ok]`/`[falhou]` printing stay as they are.
 `--limiar-n` gets `dest="n_threshold"` **and** `metavar="LIMIAR_N"`, so `--help` stays identical (the
-default metavar is derived from `dest`).
+default metavar is derived from `dest`). Argument order matters for `--help` too: `main` adds
+`--public`, `--out`, `--data-build`, `--limiar-n` and `--check` first, **then** loops over `CHECKS`
+for the per-check flags, which is today's order.
 
 **Why.** A new check becomes one module plus one registry entry instead of four edits in `main`;
-plans 1 and 2 each add one check this way.
+plans 1 and 2 each add one check this way. The lambdas keep the moved bodies and signatures
+byte-for-byte, so the move check still proves them unchanged.
 
 **Rejected.** Auto-discovery by `import`-time decorators (hides the order, which is part of the
 contract); keeping the dispatch dict (the status quo).
@@ -224,9 +237,10 @@ regex checks to be rebuilt.
 
 ```text
 scripts/
-├── 12_build_site.py              # docstring + main (about 60 lines)
+├── 12_build_site.py              # docstring + shim: imports main, entry guard (about 30 lines)
 └── sitegen/
     ├── __init__.py               # docstring only
+    ├── cli.py                    # main (argparse, registry-driven flags, check loop)
     ├── errors.py                 # BuildError
     ├── contract.py               # constants (stages, phrases, years, limits)
     ├── loader.py                 # sha256, load_data, get_indicator, has_*
@@ -250,13 +264,15 @@ scripts/
 Origin (HEAD line ranges): `errors` 107–110; `contract` 37–105; `loader` 115–319; `fmt` 322–353;
 `school_page` 355–807; `static/style.css` 814–994; `layout` 997–1019; `index_page` 1022–1097 (JS
 1057–1095 → `search.js`); `info_pages` 1100–1262; `build` 1269–1342; `checks/common` 1345–1358 and
-1565–1571; `checks/*` 1360–1797; `main` 1800–1862 stays.
+1565–1571; `checks/*` 1360–1797; `cli` 1800–1858 (`main`; the `if __name__` guard stays in the
+script).
 
 Dependency rules (no cycles): `errors` and `contract` import nothing from the package; `loader` and
 `fmt` import those two; `school_page` imports `contract`, `loader`, `fmt`, `errors`; `layout` and
 `assets` import nothing; `index_page` and `info_pages` import `layout` (and `assets` for the index);
-`build` imports pages, `loader`, `assets`; `checks` import `build` and the lower modules; **`build`
-never imports `checks`**.
+`build` imports pages, `loader`, `assets`; `checks` import `build` and the lower modules; `cli`
+imports `build`, `checks`, `contract` and `errors`; **`build` never imports `checks`, and nothing
+imports `cli`** except the script.
 
 Each new module opens with a Portuguese docstring in the `_common.py` style (Entrada / Saída /
 Idempotente). `checks/*` modules keep each function body byte-for-byte; they only gain imports.
@@ -318,7 +334,9 @@ of scope).
   `declaracao→declaration`, `registro→record`, `registros→records`,
   `registro_numero→number_record`, `numero→number`, `numeros→numbers`, `id_numero→number_id`,
   `identificador→identifier`, `indicadores→indicators`, `indicadores_df→indicators_df`,
-  `procedencia→provenance`, `execucao→execution`, `dados→data`, `dados_dir→data_dir`.
+  `procedencia→provenance`, `execucao→execution`, `dados→data`, `dados_dir→data_dir`,
+  `codigo→stage_code` (the stage code in the comprehensions of `ETAPA_LABEL` and
+  `SLUG_POR_ETAPA_LABEL`; `code` is already the target of `co`).
 - **Page assembly.** `partes→parts`, `corpo→body`, `texto→text`, `texto_visivel→visible_text`,
   `trecho→snippet`, `frase→phrase`, `frases→phrases`, `rotulo→label`, `titulo→title`,
   `linhas→rows`, `celula→cell`, `simbolo→symbol`, `prefixo→prefix`, `palavra→word`,
@@ -339,26 +357,42 @@ of scope).
 - **Scope overrides** (keyed by the *old* function name, because the tool runs on the old file):
   `carregar_dados: indicador→indicator` (the loader shadows the function with a string today, and
   keeps doing so); `pagina_creditos: fonte→source` and `check_licencas: fonte→source` (locals; the
-  global `fonte→source_note` is the method).
+  global `fonte→source_note` is the method); `PaginaEscola.render: rotulo→item_label`. The last one is
+  a real collision, not a style choice: in `render`, `rotulo` is the outer loop variable of the stage
+  loops (`for etapa, rotulo, oferta in ETAPAS`) and the `fluxo` block binds an English `label` in an
+  inner loop (`for nome, label in (...)`); with the global `rotulo→label`, the later
+  `titulo_etapa(rotulo)` would read the inner variable and print "Abandono" instead of the stage name.
+  The scope override is keyed by the old *method* name `render` (the tool matches function scopes by
+  name and line range; `render` is the only function of that name in the file).
 - **Never renamed.** Attributes of `args` (`args.limiar_n`, `args.check_procedencia`, …): their names
   derive from the flag strings; step 5 replaces them. `builtins` and names such as `license`,
   `credits`, `match`, `id` are avoided as targets (hence `license_name`, `credits_html`,
   `found_block`); `id` already exists as a parameter and stays.
 
-The tool refuses to run if the map is not injective, if a target already exists as an identifier in
-the file, or if a target is a builtin or a keyword.
+The tool refuses to run if the map is not injective, if a target is a builtin or a keyword, or if a
+**scope-aware collision** exists: within one function scope (nested comprehensions and lambdas
+included) or at module level, a renamed identifier and its target are both bound or read as `Name`
+or `arg` tokens. Targets that exist only as attributes of external objects or as keyword names of
+external calls are **not** collisions: `hashlib.sha256` (target `sha256`), `path.name` (`name`),
+`sort(key=…)` (`key`), `TemporaryDirectory(prefix=…)` (`prefix`), and a `path` parameter in a
+different function (`path`) all stay. A blanket "target must not appear anywhere in the file" rule
+would refuse those five legitimate renames, and an allowlist would let the one real collision
+through. At HEAD the rule flags exactly one pair, `rotulo→label` in `render`, resolved by the
+override above; any other pair it flags is investigated before the run. `verify_rename.py` applies the
+same map, so it cannot detect this class of error; gate G is the backstop.
 
 ## 6. Execution plan
 
-Each step is one commit and passes gate G (§7). Commit the three plan files first so the tree is
-clean.
+Each step is one commit and passes gate G (§7). Commit any pending revision of the plan files first
+so the tree is clean.
 
 ### Step 0 — Baseline and throwaway tools
 
 - [ ] `git status --short` shows nothing under `scripts/`, `docs/FASE-1.md`, `data/public/`.
-- [ ] Build the golden at HEAD (commands in §7) and store it in `/tmp/opencode/golden/`: `check.txt`
-  (the `[ok]`/`[falhou]` lines), `site.sha`, `help.txt`, `orig.py`. **If `--check` does not pass at
-  HEAD, stop**: there is no baseline to preserve.
+- [ ] Build the golden at HEAD (commands in §7, with `set -o pipefail`) and store it in
+  `/tmp/opencode/golden/`: `stdout.txt` (the whole stdout with the output path normalized: the
+  `site: … páginas de escola, … MB` line and the `[ok]` lines), `site.sha`, `help.txt`, `orig.py`.
+  **If `--check` does not pass at HEAD, stop**: there is no baseline to preserve.
 - [ ] Write three throwaway tools in `/tmp/opencode/` (not versioned; contracts in §8):
   `rename_idents.py`, `verify_rename.py`, `move_check.py`.
 
@@ -367,9 +401,10 @@ clean.
 - [ ] Run the AST inventory over `scripts/12_build_site.py` (every `Name`, `arg`, `keyword`,
   `Attribute`, def/class name, import alias, `except … as`). Review it against §5; add what is
   missing to `/tmp/opencode/rename_map.json`.
-- [ ] Run `rename_idents.py` on the file; review its list of mapped *attribute* occurrences whose
-  receiver is not `self`, `p` or `args` (guards against a map key that is also an external API
-  name).
+- [ ] Run `rename_idents.py` on the file. Its collision report must flag exactly `rotulo→label` in
+  `render` (already handled by the override); anything else is investigated first. Review its list of
+  mapped *attribute* occurrences whose receiver is not `self`, `p` or `args` (guards against a map
+  key that is also an external API name).
 - [ ] Run `verify_rename.py orig.py scripts/12_build_site.py rename_map.json`: empty output.
 - [ ] Update, by hand, comments and docstrings that mention a renamed *definition* (examples at HEAD:
   `mat_ausencias` in `mat_span`'s docstring, `carregar_dados` in `check_casos_limite`'s). `grep` the
@@ -381,46 +416,55 @@ clean.
 
 - [ ] Create `sitegen/__init__.py`, `errors.py`, `contract.py`, `fmt.py`, `loader.py` by moving the
   corresponding definitions; the script imports them from `sitegen`.
-- [ ] Gate G; `move_check.py` (identity: only imports, module docstrings and the script's own
-  header differ).
+- [ ] Gate G; `move_check.py` with the script as a second search root and an empty allowlist (only
+  imports and module docstrings differ). Symbols not moved yet are found in the script.
 
 ### Step 3 — Assets and pages
 
 - [ ] Extract `CSS` and the index JS with `ast.literal_eval` into `static/style.css` and
   `static/search.js`; create `assets.py` (with the `"\n"` prefix for the CSS, §D6).
 - [ ] Create `layout.py`, `index_page.py` (uses `JS_INDEX`), `info_pages.py`.
-- [ ] Gate G. `move_check.py` allows only `render_index_page` (JS literal) and `CSS` to differ.
+- [ ] Gate G; `move_check.py` allowlist: `CSS`, `render_index_page`.
 
 ### Step 4 — `school_page` and `build`
 
 - [ ] Create `school_page.py` (`SchoolPage` unchanged) and `build.py` (`_clean_output`,
   `_total_size`, `build_site`).
-- [ ] Gate G; `move_check.py` as in step 3.
+- [ ] Gate G; `move_check.py` with the same allowlist as step 3.
 
-### Step 5 — Checks package, registry, slim `main`
+### Step 5 — Checks package, registry, `cli.py`
 
-- [ ] Create `checks/common.py`, the seven check modules (bodies unchanged) and
-  `checks/__init__.py` with `CheckContext`, `Check`, `CHECKS` (table in D5).
-- [ ] Rewrite `main`: flags and the `--check` list come from `CHECKS`; `--limiar-n` uses
-  `dest="n_threshold"` and `metavar="LIMIAR_N"`; individual flags are read with
+- [ ] Create `checks/common.py`, the seven check modules (functions unchanged, original signatures)
+  and `checks/__init__.py` with `CheckContext`, `Check` and `CHECKS`, wrapping each function in the
+  lambda of the D5 table.
+- [ ] Create `sitegen/cli.py` with `main`, rewritten: the four base arguments and `--check` are added
+  first, then one flag per `CHECKS` entry that has one; `--limiar-n` uses `dest="n_threshold"` and
+  `metavar="LIMIAR_N"`; individual flags are read with
   `getattr(args, check.flag[2:].replace("-", "_"))`; the `ERRO:` and `[falhou]` paths and exit codes
   stay.
-- [ ] Gate G; `move_check.py` allows `main`, `CSS`, `render_index_page` to differ.
+- [ ] Reduce `scripts/12_build_site.py` to the shim of D1: the Portuguese docstring, `from __future__
+  import annotations`, `from sitegen.cli import main` and the entry guard.
+- [ ] Gate G; `move_check.py` allowlist: `CSS`, `render_index_page`, `main`. The script is still a
+  search root but now contributes no symbol.
 - [ ] Mutation tests (§7), each on a clean tree and reverted afterwards.
 
 ### Step 6 — `SchoolPage.render` into `_block_*`
 
 - [ ] Replace the nine in-line sections with the nine methods of D7, in the same order, each
   returning `"".join(parts)`; `render` appends their results.
-- [ ] Gate G. The site hash is the proof; `move_check.py` now allows `SchoolPage.render` and the nine
-  new methods.
+- [ ] Gate G. The site hash is the proof; the `move_check.py` allowlist is cumulative: `CSS`,
+  `render_index_page`, `main`, plus `SchoolPage.render` (the nine new methods are not in the
+  reference file, so they need no entry).
 
 ### Step 7 — Docs and worklog
 
 - [ ] `README.md`: replace the one `12_build_site.py` line of the `scripts/` tree with the thin CLI
-  plus `sitegen/` and a one-line description.
-- [ ] `docs/FASE-1.md`: §5.3 gets one sentence (the build lives in `scripts/sitegen/`;
-  `12_build_site.py` is the CLI); line 402 `check_casos_limite` → `check_edge_cases`.
+  plus `sitegen/` and a one-line description; line 115 ("o build em `scripts/12_build_site.py`")
+  becomes "o build em `scripts/12_build_site.py` (a CLI) e `scripts/sitegen/`".
+- [ ] `docs/FASE-1.md`: line 4 ("o build … vive em `scripts/12_build_site.py`") gets the same
+  addition; §5.3 gets one sentence (the build lives in `scripts/sitegen/`; `12_build_site.py` is the
+  CLI); line 402 `check_casos_limite` → `check_edge_cases`. `SCHEMA.md:626` stays: it describes the
+  command, not the layout.
 - [ ] The docstring of `12_build_site.py` mentions the package.
 - [ ] `docs/worklogs/2026-11-10-01-refatorar-build-site.md` (Portuguese: *O que entrou*, *Decisões*,
   *Verificação* with the gate output pasted, *Pendências* with Q3), including the explicit sentence
@@ -433,11 +477,12 @@ clean.
 ### Gate G (run at every step)
 
 ```sh
+set -o pipefail      # a failing --check or build must fail the pipeline, not just the diff
 G=/tmp/opencode/golden; W=/tmp/opencode/work; mkdir -p "$G" "$W"
 
 # step 0 only, from a clean HEAD
 .venv/bin/python scripts/12_build_site.py --public data/public --out "$G/site" \
-  --data-build 2026-11-06 --check | grep -E '^\[(ok|falhou)\]' > "$G/check.txt"
+  --data-build 2026-11-06 --check | sed "s#$G/site#OUT#g" > "$G/stdout.txt"
 (cd "$G/site" && find . -type f -exec sha256sum {} + | sort -k2) > "$G/site.sha"
 COLUMNS=100 .venv/bin/python scripts/12_build_site.py --help > "$G/help.txt"
 cp scripts/12_build_site.py "$G/orig.py"
@@ -446,15 +491,17 @@ cp scripts/12_build_site.py "$G/orig.py"
 .venv/bin/python -m compileall -q scripts
 rm -rf "$W/site"
 .venv/bin/python scripts/12_build_site.py --public data/public --out "$W/site" \
-  --data-build 2026-11-06 --check | grep -E '^\[(ok|falhou)\]' | diff - "$G/check.txt"
+  --data-build 2026-11-06 --check | sed "s#$W/site#OUT#g" | diff - "$G/stdout.txt"
 (cd "$W/site" && find . -type f -exec sha256sum {} + | sort -k2) | diff - "$G/site.sha"
 COLUMNS=100 .venv/bin/python scripts/12_build_site.py --help | diff - "$G/help.txt"
 git diff --stat -- data/public          # empty
 git status --short                      # only the files of the step; site/ never appears
 ```
 
-`check.txt` has seven `[ok]` lines at HEAD (procedencia, ranking, limiar, estados,
-reprodutibilidade, licencas, casos_limite). All diffs must be empty.
+`stdout.txt` has the `site: 1,291 páginas de escola, … MB em OUT` summary line and seven `[ok]` lines
+at HEAD (procedencia, ranking, limiar, estados, reprodutibilidade, licencas, casos_limite). The path
+is normalized with `sed` instead of filtering lines, so the summary line, the size and any `AVISO`
+or `ERRO:` line stay compared. All diffs must be empty.
 
 ### Mutation tests (step 5; clean tree, `git checkout -- scripts/sitegen` after each)
 
@@ -471,16 +518,20 @@ They prove the moved checks still fail when they should, which the byte gate can
 - **`rename_idents.py <map.json> <file>`** — tokenizes with `tokenize` (Python 3.12 emits NAME tokens
   inside f-string replacement fields), replaces only NAME tokens by (row, col) span so formatting,
   comments and strings are untouched; honors `scope_overrides` by function line range and skips
-  attributes of `args`; enforces the injectivity, collision and builtin checks of §5.3.
+  attributes of `args`; enforces the injectivity, builtin and scope-aware collision checks of §5.3
+  and prints every collision it finds (expected at HEAD: `rotulo→label` in `render`, overridden).
 - **`verify_rename.py <old.py> <new.py> <map.json>`** — independent of the tokenizer: applies the same
   map with an `ast.NodeTransformer` (`Name.id`, `arg.arg`, `keyword.arg`, `Attribute.attr`,
   `FunctionDef.name`, `ClassDef.name`, `alias`, `ExceptHandler.name`, same overrides and `args`
   exception) to the old tree and compares `ast.dump` with the new tree, docstrings blanked on both
   sides. Any difference is printed.
-- **`move_check.py <renamed.py> <package-dir> [--allow name,…]`** — for every top-level `def`, class
-  (method by method) and assignment of the reference file, finds it exactly once in the package and
-  compares `ast.dump`; names in `--allow` may differ; imports, module docstrings and the script's
-  header are ignored; unmatched or duplicated names fail.
+- **`move_check.py <renamed.py> <package-dir> <script.py> [--allow name,…]`** — for every top-level
+  `def`, class (method by method) and assignment of the reference file, finds it exactly once across
+  **two search roots**: the package and the current `scripts/12_build_site.py`; compares `ast.dump`.
+  Names in `--allow` may differ or be absent (they are the deliberate edits); imports, module
+  docstrings and the script's header are ignored; a name found zero times (not allowed) or more than
+  once fails. The allowlist is cumulative across steps (steps 2 → 6 in §6). Without the script as a
+  root, every symbol not yet moved would be "unmatched" at steps 2–4.
 
 ## 9. Risks and open questions
 
@@ -491,7 +542,9 @@ They prove the moved checks still fail when they should, which the byte gate can
 - **Step 6 is the only non-mechanical edit to rendering.** Mitigation: it is its own commit and the
   hash of every `dados/*.json` proves the order of `_add` calls.
 - **Tool bug in the rename.** Two independent mechanisms (token rewrite, AST transform) must agree;
-  the attribute-receiver review catches a map key that collides with an external API.
+  the attribute-receiver review catches a map key that collides with an external API. Both apply the
+  same map, so neither sees a name collision between two renamed identifiers (the `rotulo`/`label`
+  case): the scope-aware guard in `rename_idents.py` and gate G catch that class.
 - **Review noise.** Git does not track code moved between files; use one commit per step and
   `git diff --color-moved=dimmed-zebra`.
 - **Assets read at import.** A missing `static/` file becomes a traceback instead of `ERRO:`; that is
@@ -523,7 +576,8 @@ They prove the moved checks still fail when they should, which the byte gate can
 
 ## 11. Definition of done
 
-- [ ] `scripts/12_build_site.py` is at most about 70 lines; no `sitegen` module exceeds about 500
+- [ ] `scripts/12_build_site.py` is a shim of about 35 lines at most (docstring, one import, the entry
+  guard); `sitegen/cli.py` is about 80 lines at most; no other `sitegen` module exceeds about 500
   lines.
 - [ ] Gate G passes at every commit; the final `site/` hashes equal the step-0 golden; the three
   mutations fail as expected.
