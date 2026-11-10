@@ -6,6 +6,8 @@ Idempotente: sim — só lê."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ..errors import BuildError
 from ..contract import STATES, STUDENT_COUNT_FAMILIES, SLUG_BY_STAGE_LABEL
 from .common import read_page, read_school_json, number_ids

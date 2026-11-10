@@ -6,6 +6,8 @@ Idempotente: sim — só lê."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import re
 
 from ..errors import BuildError
