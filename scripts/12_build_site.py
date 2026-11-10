@@ -24,7 +24,6 @@ Uso:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import html
 import json
 import re
@@ -34,322 +33,10 @@ from pathlib import Path
 
 import pandas as pd
 
-DEFAULT_DATA_BUILD = "2026-11-06"
-DEFAULT_N_THRESHOLD = 30
-MAX_SITE_BYTES = 700 * 1024 * 1024
-
-STAGES = [
-    ("AI", "anos iniciais", "oferta_fund_ai"),
-    ("AF", "anos finais", "oferta_fund_af"),
-    ("EM", "ensino médio", "oferta_med"),
-]
-STAGE_LABEL = {stage_code: label for stage_code, label, _ in STAGES}
-STAGE_SLUG = {"AI": "ai", "AF": "af", "EM": "em", "CRE": "creche"}
-ENROLLMENT_COLUMNS = {
-    ("CRE", "2024"): "mat_inf_cre_2024",
-    ("CRE", "2025"): "mat_inf_cre_2025",
-    ("AI", "2024"): "mat_fund_ai_2024",
-    ("AI", "2025"): "mat_fund_ai_2025",
-    ("AF", "2024"): "mat_fund_af_2024",
-    ("AF", "2025"): "mat_fund_af_2025",
-    ("EM", "2024"): "mat_med_2024",
-    ("EM", "2025"): "mat_med_2025",
-}
-ENROLLMENT_LABEL = {"CRE": "creche", "AI": "anos iniciais", "AF": "anos finais", "EM": "ensino médio"}
-OFFERINGS = [
-    ("oferta_inf_cre", "Creche"),
-    ("oferta_inf_pre", "Pré-escola"),
-    ("oferta_fund_ai", "Anos iniciais do ensino fundamental"),
-    ("oferta_fund_af", "Anos finais do ensino fundamental"),
-    ("oferta_med", "Ensino médio"),
-    ("oferta_eja", "Educação de jovens e adultos"),
-    ("oferta_esp", "Educação especial"),
-    ("oferta_prof", "Educação profissional"),
-]
-INFRA_ITEMS = [
-    ("IN_BIBLIOTECA", "Biblioteca"),
-    ("IN_SALA_LEITURA", "Sala de leitura"),
-    ("IN_QUADRA_ESPORTES", "Quadra de esportes"),
-    ("IN_LABORATORIO_INFORMATICA", "Laboratório de informática"),
-    ("IN_LABORATORIO_CIENCIAS", "Laboratório de ciências"),
-    ("IN_INTERNET_ALUNOS", "Internet para os alunos"),
-    ("IN_REFEITORIO", "Refeitório"),
-    ("IN_BANHEIRO_PNE", "Banheiro acessível (cadeirante)"),
-]
-IDEB_YEARS = [str(year) for year in range(2005, 2026, 2)]
-IDEB_YEARS_BY_STAGE = {"AI": IDEB_YEARS, "AF": IDEB_YEARS, "EM": ["2017", "2019", "2021", "2023", "2025"]}
-NETWORKS = {"federal", "estadual", "privada conveniada", "privada não conveniada"}
-STATES = {"valor", "zero", "ausente", "nao_aplicavel"}
-
-PHRASE_STAGE_NOT_OFFERED = "— esta etapa não é ofertada pela escola em 2025"
-PHRASE_IDEB_PRIVATE = "sem Ideb: a INEP não publica resultado de escola privada depois de 2017"
-PHRASE_IDEB_PUBLIC = (
-    "sem Ideb em 2025: a INEP não publica quando há menos de 10 alunos na prova "
-    "ou participação abaixo de 80%, e não informa qual foi o caso"
-)
-PHRASE_CENSUS_2024_NO_ROW = "a escola não consta do Censo de 2024"
-PHRASE_ENROLLMENT_2024 = "matrícula não declarada no Censo de 2024"
-PHRASE_ENROLLMENT_2025 = "matrícula não declarada no Censo de 2025"
-PHRASE_NO_INDICATOR = "esta escola não tem Ideb nem taxas publicadas em 2025"
-PHRASE_INFRA_NOT_APPLICABLE = (
-    "a infraestrutura é publicada para as escolas que oferecem ensino fundamental ou médio"
-)
-PHRASE_SMALL_N = "nesta etapa — o indicador não é publicado quando a turma é pequena"
-
-# Famílias cujo n é contagem de alunos (e não a própria escola). Só nelas o
-# JSON admite n = null e o campo n_referencia.
-STUDENT_COUNT_FAMILIES = {"ideb", "fluxo", "tdi", "tnr"}
-SLUG_BY_STAGE_LABEL = {
-    label: STAGE_SLUG[stage_code] for stage_code, label, _ in STAGES
-}
-
-
-class BuildError(Exception):
-    """O build não pode continuar; a mensagem diz o que falta ou diverge."""
-
-
-# --------------------------------------------------------------------------
-# Leitura e validação do insumo público
-
-
-def sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for block in iter(lambda: fh.read(1 << 20), b""):
-            h.update(block)
-    return h.hexdigest()
-
-
-def _int_or_none(value) -> int | None:
-    return None if value is None or pd.isna(value) else int(value)
-
-
-def _records_by_family(provenance: dict) -> dict[str, dict]:
-    records = provenance.get("registros")
-    if not isinstance(records, list) or not records:
-        raise BuildError("procedencia.json sem a lista 'registros'")
-    mapping = {}
-    licenses_by_source: dict[str, tuple[str, str | None]] = {}
-    for record in records:
-        family = record.get("familia")
-        if not family or family in mapping:
-            raise BuildError(f"procedencia.json com família ausente ou duplicada: {family!r}")
-        for field in ("fonte", "arquivo", "calculo", "licenca"):
-            if not record.get(field):
-                raise BuildError(f"registro {family!r} sem {field}")
-        if "licenca_url" not in record:
-            raise BuildError(f"registro {family!r} sem licenca_url (pode ser null)")
-        if not record.get("limites"):
-            raise BuildError(f"registro {family!r} sem limites")
-        key = (record["licenca"], record["licenca_url"])
-        previous = licenses_by_source.setdefault(record["fonte"], key)
-        if previous != key:
-            raise BuildError(
-                f"famílias da fonte {record['fonte']!r} divergem em licença: "
-                f"{previous!r} × {key!r}"
-            )
-        mapping[family] = record
-    return mapping
-
-
-def load_data(public: Path) -> dict:
-    """Lê e valida `data/public/`; devolve o modelo usado por todas as páginas."""
-    public = Path(public)
-    if not public.is_dir():
-        raise BuildError(f"data/public não existe: {public} (rode 06_analysis.py --public)")
-    for name in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet", "procedencia.json"):
-        if not (public / name).is_file():
-            raise BuildError(f"falta {public / name} (rode 06_analysis.py --public)")
-
-    provenance = json.loads((public / "procedencia.json").read_text(encoding="utf-8"))
-    hashes = provenance.get("sha256")
-    if not isinstance(hashes, dict):
-        raise BuildError("procedencia.json sem o mapa 'sha256' dos parquets")
-    for name in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet"):
-        if not hashes.get(name):
-            raise BuildError(f"procedencia.json sem sha256 de {name}")
-        actual = sha256(public / name)
-        if actual != hashes[name]:
-            raise BuildError(
-                f"sha256 de {name} não confere: registrado {hashes[name]}, arquivo {actual}. "
-                "Rode 06_analysis.py --public novamente."
-            )
-
-    schools_df = pd.read_parquet(public / "escolas.parquet")
-    for column in (
-        "co_entidade", "nome", "ra", "rede", "rede_cadastro",
-        "censo_2024_presente",
-        "oferta_inf_cre", "oferta_inf_pre", "oferta_fund_ai", "oferta_fund_af",
-        "oferta_med", "oferta_eja", "oferta_esp", "oferta_prof",
-        "mat_inf_cre_2024", "mat_fund_ai_2024", "mat_fund_af_2024", "mat_med_2024",
-        "mat_inf_cre_2025", "mat_fund_ai_2025", "mat_fund_af_2025", "mat_med_2025",
-    ):
-        if column not in schools_df:
-            raise BuildError(f"escolas.parquet sem a coluna {column}")
-
-    schools = []
-    for r in schools_df.to_dict("records"):
-        code = str(r["co_entidade"]).strip()
-        if not code:
-            raise BuildError("escolas.parquet com co_entidade vazio")
-        if len(code) < 8:
-            code = code.zfill(8)
-        if r["rede"] not in NETWORKS:
-            raise BuildError(f"escola {code} com rede fora do contrato: {r['rede']!r}")
-        if pd.isna(r["censo_2024_presente"]):
-            raise BuildError(f"escola {code} sem censo_2024_presente")
-        school = {
-            "co": code,
-            "nome": str(r["nome"]).strip(),
-            "ra": str(r["ra"]).strip(),
-            "rede": r["rede"],
-            "rede_cadastro": str(r["rede_cadastro"]).strip(),
-            "censo_2024_presente": bool(r["censo_2024_presente"]),
-        }
-        for column, _ in OFFERINGS:
-            school[column] = int(r[column]) if not pd.isna(r[column]) else 0
-        for (stage, year), column in ENROLLMENT_COLUMNS.items():
-            school[f"mat_{stage}_{year}"] = _int_or_none(r[column])
-        if not school["censo_2024_presente"]:
-            filled = [
-                stage for stage in ("CRE", "AI", "AF", "EM")
-                if school.get(f"mat_{stage}_2024") is not None
-            ]
-            if filled:
-                raise BuildError(
-                    f"escola {code} sem linha no Censo 2024 com matrícula de 2024: "
-                    + ", ".join(filled)
-                )
-        schools.append(school)
-    schools.sort(key=lambda e: e["co"])
-
-    by_code = {}
-    for school in schools:
-        if school["co"] in by_code:
-            raise BuildError(f"escolas.parquet com CO_ENTIDADE duplicado: {school['co']}")
-        by_code[school["co"]] = school
-
-    indicators = {}
-    indicators_df = pd.read_parquet(public / "indicadores.parquet")
-    for r in indicators_df.to_dict("records"):
-        code = str(r["co_entidade"]).strip()
-        stage = str(r["etapa"])
-        indicator = str(r["indicador"])
-        year = str(r["ano"])
-        state = str(r["estado"])
-        if code not in by_code:
-            raise BuildError(f"indicador de escola fora do cadastro: {code}")
-        if stage not in STAGE_LABEL:
-            raise BuildError(f"indicador com etapa fora do contrato: {stage!r}")
-        if state not in STATES:
-            raise BuildError(f"indicador com estado fora do contrato: {state!r}")
-        value = None if pd.isna(r["valor"]) else float(r["valor"])
-        if state in ("valor", "zero") and value is None:
-            raise BuildError(f"indicador {code}/{stage}/{indicator}/{year} com estado {state} e valor nulo")
-        if state in ("ausente", "nao_aplicavel") and value is not None:
-            raise BuildError(f"indicador {code}/{stage}/{indicator}/{year} com estado {state} e valor")
-        key = (code, stage, indicator, year)
-        if key in indicators:
-            raise BuildError(f"indicador duplicado: {key}")
-        indicators[key] = {"valor": value, "estado": state}
-
-    infra = {}
-    infra_df = pd.read_parquet(public / "infraestrutura.parquet")
-    for r in infra_df.to_dict("records"):
-        code = str(r["co_entidade"]).strip()
-        item = str(r["item"])
-        state = str(r["estado"])
-        if code not in by_code:
-            raise BuildError(f"infraestrutura de escola fora do cadastro: {code}")
-        if state not in STATES:
-            raise BuildError(f"infraestrutura com estado fora do contrato: {state!r}")
-        value = _int_or_none(r["valor"])
-        if state == "valor" and value not in (0, 1):
-            raise BuildError(f"infraestrutura {code}/{item} com valor fora de 0/1: {value!r}")
-        infra[(code, item)] = {"valor": value, "estado": state, "ano": str(r["ano"])}
-
-    execution = provenance.get("execucao") or {}
-    skipped_steps = execution.get("etapas_puladas") if isinstance(execution, dict) else None
-    if skipped_steps is None:
-        skipped_steps = []
-    if not isinstance(skipped_steps, list):
-        raise BuildError("procedencia.json com execucao.etapas_puladas fora de lista")
-    if skipped_steps:
-        print(
-            "AVISO: o insumo público foi exportado com --parcial e tem etapa(s) "
-            "pulada(s): " + ", ".join(str(e) for e in skipped_steps)
-        )
-
-    return {
-        "escolas": schools,
-        "por_co": by_code,
-        "indicadores": indicators,
-        "infra": infra,
-        "procedencia": provenance,
-        "registros": _records_by_family(provenance),
-        "hashes": hashes,
-        "etapas_puladas": [str(e) for e in skipped_steps],
-    }
-
-
-def get_indicator(data: dict, code: str, stage: str, name: str, year: str = "2025") -> dict:
-    """Devolve o registro do indicador ou `ausente` quando não existe linha."""
-    return data["indicadores"].get((code, stage, name, str(year)), {"valor": None, "estado": "ausente"})
-
-
-def has_published_ideb(data: dict, school: dict) -> bool:
-    return any(
-        school[offering]
-        and get_indicator(data, school["co"], stage, "ideb_observado")["estado"] == "valor"
-        for stage, _, offering in STAGES
-    )
-
-
-def has_rate_row(data: dict, school: dict) -> bool:
-    for stage, _, offering in STAGES:
-        if not school[offering]:
-            continue
-        for name in ("tdi", "tnr", "aprovacao", "reprovacao", "abandono"):
-            if (school["co"], stage, name, "2025") in data["indicadores"]:
-                return True
-    return False
-
-
-# --------------------------------------------------------------------------
-# Formatação e HTML
-
-
-def fmt_int(value) -> str:
-    return f"{int(value):,}".replace(",", ".")
-
-
-def fmt_dec(value) -> str:
-    return f"{float(value):.1f}".replace(".", ",")
-
-
-def fmt_years(years) -> str:
-    years = [str(a) for a in years]
-    if not years:
-        return ""
-    if years == IDEB_YEARS:
-        return "2005–2025, de dois em dois anos"
-    if len(years) == 1:
-        return years[0]
-    if len(years) == 2 and int(years[1]) - int(years[0]) == 1:
-        return f"{years[0]}–{years[1]}"
-    return ", ".join(years)
-
-
-def stage_slug(stage: str) -> str:
-    return STAGE_SLUG.get(stage, stage.lower())
-
-
-def stage_title(label: str) -> str:
-    return label[:1].upper() + label[1:]
-
-
-def student_word(n: int | None) -> str:
-    return "aluno" if n == 1 else "alunos"
+from sitegen.errors import BuildError
+from sitegen.contract import DEFAULT_DATA_BUILD, DEFAULT_N_THRESHOLD, MAX_SITE_BYTES, STAGES, STAGE_LABEL, ENROLLMENT_LABEL, OFFERINGS, INFRA_ITEMS, IDEB_YEARS_BY_STAGE, STATES, PHRASE_STAGE_NOT_OFFERED, PHRASE_IDEB_PRIVATE, PHRASE_IDEB_PUBLIC, PHRASE_CENSUS_2024_NO_ROW, PHRASE_ENROLLMENT_2024, PHRASE_ENROLLMENT_2025, PHRASE_NO_INDICATOR, PHRASE_INFRA_NOT_APPLICABLE, PHRASE_SMALL_N, STUDENT_COUNT_FAMILIES, SLUG_BY_STAGE_LABEL
+from sitegen.fmt import fmt_int, fmt_dec, fmt_years, stage_slug, stage_title, student_word
+from sitegen.loader import sha256, load_data, get_indicator, has_published_ideb, has_rate_row
 
 
 class SchoolPage:
@@ -807,10 +494,6 @@ class SchoolPage:
         return "".join(parts)
 
 
-# --------------------------------------------------------------------------
-# Páginas fixas
-
-
 CSS = """
 :root {
   --tinta: #1d2433;
@@ -1262,10 +945,6 @@ desta versão. A matrícula publicada vem do Censo da INEP (L-62).</p>
     return document("Créditos e licenças — Prova dos Nove", body, data_build, threshold)
 
 
-# --------------------------------------------------------------------------
-# Build
-
-
 def _clean_output(site: Path) -> None:
     for name in ("index.html", "creditos.html", "como-ler.html", "estilo.css", "indice.json"):
         target = site / name
@@ -1336,10 +1015,6 @@ def build_site(public: Path, out: Path, data_build: str, threshold: int, quiet: 
             f"{total / (1024 * 1024):.1f} MB em {out}"
         )
     return {"escolas": len(data["escolas"]), "bytes": total, "dados": data}
-
-
-# --------------------------------------------------------------------------
-# Verificações do §8
 
 
 def read_page(site: Path, code: str) -> str:
@@ -1791,10 +1466,6 @@ def check_licenses(site: Path, data: dict) -> str:
         if required not in credits_html:
             raise BuildError(f"creditos.html sem {required!r}")
     return f"{len(sources)} fontes com licença declarada nos créditos"
-
-
-# --------------------------------------------------------------------------
-# CLI
 
 
 def main(argv: list[str] | None = None) -> int:
