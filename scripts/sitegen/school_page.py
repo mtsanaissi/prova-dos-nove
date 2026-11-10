@@ -220,6 +220,30 @@ class SchoolPage:
         if offers_assessed_stage and not has_ideb and not has_rate:
             parts.append(self.absence(PHRASE_NO_INDICATOR, "L-09", "ideb"))
 
+        parts.append(self._block_identification())
+        parts.append(self._block_offering())
+        parts.append(self._block_enrollment())
+        parts.append(self._block_ideb())
+        parts.append(self._block_flow())
+        parts.append(self._block_age_grade_distortion())
+        parts.append(self._block_non_response())
+        parts.append(self._block_infrastructure())
+        if e["oferta_inf_cre"] == 1:
+            parts.append(self._block_daycare())
+
+        parts.append(
+            f'<p class="rodape-pagina">Procedência de cada número: '
+            f'<a href="dados/{code}.json">dados/{code}.json</a>. '
+            '<a href="como-ler.html">Como ler os números</a> · '
+            '<a href="creditos.html">Créditos e licenças</a>.</p>'
+        )
+        parts.append("</main>")
+        return "".join(parts)
+
+    def _block_identification(self) -> str:
+        e = self.e
+        code = e["co"]
+        parts = []
         # 1. identificação
         parts.append('<section class="bloco" id="identificacao">')
         parts.append(self._section_heading("Identificação"))
@@ -234,7 +258,11 @@ class SchoolPage:
             f'{self.source_note("identificacao")}'
             "</section>"
         )
+        return "".join(parts)
 
+    def _block_offering(self) -> str:
+        e = self.e
+        parts = []
         # 2. oferta
         parts.append('<section class="bloco" id="oferta">')
         parts.append(self._section_heading("Oferta por etapa"))
@@ -245,7 +273,11 @@ class SchoolPage:
         parts.append("</tbody></table>")
         parts.append(self.source_note("oferta"))
         parts.append("</section>")
+        return "".join(parts)
 
+    def _block_enrollment(self) -> str:
+        e = self.e
+        parts = []
         # 3. matrícula
         parts.append('<section class="bloco" id="matricula">')
         parts.append(self._section_heading("Matrícula por etapa"))
@@ -261,7 +293,12 @@ class SchoolPage:
         parts.append(self.enrollment_absences("matricula", ("2024", "2025"), ["CRE", "AI", "AF", "EM"]))
         parts.append(self.source_note("matricula"))
         parts.append("</section>")
+        return "".join(parts)
 
+    def _block_ideb(self) -> str:
+        e = self.e
+        code = e["co"]
+        parts = []
         # 4. Ideb
         parts.append('<section class="bloco" id="ideb">')
         parts.append(self._section_heading("Ideb por etapa"))
@@ -299,7 +336,12 @@ class SchoolPage:
             parts.append(self._stage_article("ideb", stage, n, status, "".join(body)))
         parts.append(self.source_note("ideb"))
         parts.append("</section>")
+        return "".join(parts)
 
+    def _block_flow(self) -> str:
+        e = self.e
+        code = e["co"]
+        parts = []
         # 5. fluxo
         parts.append('<section class="bloco" id="fluxo">')
         parts.append(self._section_heading("Fluxo escolar"))
@@ -339,7 +381,12 @@ class SchoolPage:
             parts.append(self._stage_article("fluxo", stage, n, "publicado" if has_value else "ausente", body))
         parts.append(self.source_note("fluxo"))
         parts.append("</section>")
+        return "".join(parts)
 
+    def _block_age_grade_distortion(self) -> str:
+        e = self.e
+        code = e["co"]
+        parts = []
         # 6. distorção idade-série
         parts.append('<section class="bloco" id="tdi">')
         parts.append(self._section_heading("Distorção idade-série"))
@@ -374,7 +421,12 @@ class SchoolPage:
             parts.append(self._stage_article("tdi", stage, n, "publicado" if entry["estado"] in ("valor", "zero") else "ausente", body))
         parts.append(self.source_note("tdi"))
         parts.append("</section>")
+        return "".join(parts)
 
+    def _block_non_response(self) -> str:
+        e = self.e
+        code = e["co"]
+        parts = []
         # 7. não-resposta
         parts.append('<section class="bloco" id="tnr">')
         parts.append(self._section_heading("Taxa de não-resposta"))
@@ -413,7 +465,12 @@ class SchoolPage:
         )
         parts.append(self.source_note("tnr"))
         parts.append("</section>")
+        return "".join(parts)
 
+    def _block_infrastructure(self) -> str:
+        e = self.e
+        code = e["co"]
+        parts = []
         # 8. infraestrutura
         parts.append('<section class="bloco" id="infraestrutura">')
         parts.append(self._section_heading("Infraestrutura"))
@@ -444,26 +501,20 @@ class SchoolPage:
             parts.append('<p class="nota">O item é o que a escola declarou ao Censo Escolar de 2025.</p>')
         parts.append(self.source_note("infraestrutura"))
         parts.append("</section>")
+        return "".join(parts)
 
-        # 9. creche (só quando a escola oferta creche)
-        if e["oferta_inf_cre"] == 1:
-            parts.append('<section class="bloco" id="creche">')
-            parts.append(self._section_heading("Creche da escola"))
-            parts.append('<table class="tabela tabela-estreita"><thead><tr><th>Ano</th><th>Matrícula em creche</th></tr></thead><tbody>')
-            for year in ("2024", "2025"):
-                parts.append(
-                    f"<tr><td>{year}</td><td>{self.enrollment_span('CRE', year, 'creche')}</td></tr>"
-                )
-            parts.append("</tbody></table>")
-            parts.append(self.enrollment_absences("creche", ("2024", "2025"), ["CRE"]))
-            parts.append(self.source_note("creche"))
-            parts.append("</section>")
-
-        parts.append(
-            f'<p class="rodape-pagina">Procedência de cada número: '
-            f'<a href="dados/{code}.json">dados/{code}.json</a>. '
-            '<a href="como-ler.html">Como ler os números</a> · '
-            '<a href="creditos.html">Créditos e licenças</a>.</p>'
-        )
-        parts.append("</main>")
+    def _block_daycare(self) -> str:
+        e = self.e
+        parts = []
+        parts.append('<section class="bloco" id="creche">')
+        parts.append(self._section_heading("Creche da escola"))
+        parts.append('<table class="tabela tabela-estreita"><thead><tr><th>Ano</th><th>Matrícula em creche</th></tr></thead><tbody>')
+        for year in ("2024", "2025"):
+            parts.append(
+                f"<tr><td>{year}</td><td>{self.enrollment_span('CRE', year, 'creche')}</td></tr>"
+            )
+        parts.append("</tbody></table>")
+        parts.append(self.enrollment_absences("creche", ("2024", "2025"), ["CRE"]))
+        parts.append(self.source_note("creche"))
+        parts.append("</section>")
         return "".join(parts)
