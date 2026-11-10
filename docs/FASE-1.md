@@ -1,7 +1,8 @@
 # FASE-1.md — a página por escola
 
 Contrato da fase 1. Este documento **define** a página; não a constrói (D1). O
-build é da fase 2 e vive em `scripts/12_build_site.py`. Toda afirmação aqui tem
+build é da fase 2 e vive em `scripts/12_build_site.py` (a CLI) e em
+`scripts/sitegen/` (o pacote). Toda afirmação aqui tem
 arquivo, ano e cálculo, e todo número publicado cita os ids de `docs/LIMITES.md`
 que o limitam — a coluna "limites" de cada bloco é a lista fechada.
 
@@ -288,6 +289,9 @@ python scripts/12_build_site.py --public data/public --out site \
   --data-build 2026-11-06 --check
 ```
 
+O build vive em `scripts/sitegen/`; `scripts/12_build_site.py` é a CLI e mantém
+o comando acima.
+
 - Sem dependência nova: só `pandas` e `pyarrow` (já em `requirements.txt`) e
   HTML montado por f-string. O ambiente de CI instala apenas o `requirements.txt`;
   `jinja2` não está lá e não entra por causa do build.
@@ -399,7 +403,7 @@ discordar de uma pessoa. O `--check` varre todas as 1.291 páginas nos critério
 1, 3 e 4, todo o HTML e o índice no critério 2, todo o `site/dados` no critério
 6 e faz um segundo build no critério 5; não há amostra de 10 páginas. Os sete
 perfis do §4 entram na conferência manual e os casos de limite no
-`check_casos_limite`.
+`check_edge_cases`.
 
 **1. Procedência completa.** Todo número visível tem entrada em
 `dados/<CO_ENTIDADE>.json` com `fonte`, `arquivo`, `ano`, `calculo`, `n` e

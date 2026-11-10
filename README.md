@@ -112,7 +112,8 @@ depois de 2017 (`REPORT.md` §5). Naquele momento ainda não havia produto: havi
 inventário, dicionário de dados e as respostas que os dados já permitem.
 
 **Build da fase 1 — página por escola (2026-11-07).** O contrato está em
-[`docs/FASE-1.md`](docs/FASE-1.md) e o build em `scripts/12_build_site.py`.
+[`docs/FASE-1.md`](docs/FASE-1.md) e o build em `scripts/12_build_site.py` (a
+CLI) e `scripts/sitegen/`.
 `06_analysis.py --public data/public` exporta o recorte versionado (1.291
 escolas, indicadores com `estado`, infraestrutura das 927 escolas de EF/EM e a
 flag `censo_2024_presente`) e o build gera `site/`: índice alfabético sem número,
@@ -275,7 +276,8 @@ sobre um universo restrito às escolas que ofertam fundamental/médio).
     ├── 09_download_malha.py   # malha das RAs (IDE/DF), só validação por atributo
     ├── 10_ingest_pdad.py      # microdados da PDAD-A: agregados por RA
     ├── 11_ingest_censo.py     # recorte do DF dos microdados do Censo Escolar
-    └── 12_build_site.py       # build estático da página por escola (FASE-1)
+    ├── 12_build_site.py       # CLI do build estático da página por escola (FASE-1)
+    └── sitegen/               # pacote do build: loader, páginas, checks e assets
 ```
 
 ## Como rodar

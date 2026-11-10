@@ -14,6 +14,8 @@ Regras de leitura: `estado` vem do parquet e nunca é deduzido de `NaN` quando a
 fonte o registra; `0` é zero; `—` é não aplicável. O build lê apenas
 `data/public/` e confere o sha256 registrado em `procedencia.json`.
 
+O build vive em `scripts/sitegen/`; este arquivo é a CLI.
+
 Uso:
     python scripts/12_build_site.py --public data/public --out site \
         --data-build 2026-11-06 --limiar-n 30
