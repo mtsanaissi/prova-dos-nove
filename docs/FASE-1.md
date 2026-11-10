@@ -38,7 +38,7 @@ inteira, n = 1.
 
 | # | bloco | fonte e arquivo | ano | cálculo | n | limites |
 |---|---|---|---|---|---|---|
-| 1 | identificação | cadastro SEEDF, `escolas__relatorio_escolas_2025.parquet` (`NO_ENTIDADE`, `Nome RA`, `Nome Rede`) | 2025 | cópia do campo | 1.291 | L-36, L-37 |
+| 1 | identificação | cadastro SEEDF, `escolas__relatorio_escolas_2025.parquet` (`Nome da escola`, `Nome RA`, `Nome Rede`) | 2025 | cópia do campo | 1.291 | L-36, L-37 |
 | 2 | oferta por etapa | mesmo cadastro, vetor `INF_CRE`…`PROF` (8 sinalizadores) | 2025 | flag 1 = oferta; **não** traduzir "é EI" | 1.291 | L-57, L-36 |
 | 3 | matrícula por etapa | Censo INEP, `censo_escola_df.parquet` (`QT_MAT_INF_CRE`, `QT_MAT_FUND_AI`, `QT_MAT_FUND_AF`, `QT_MAT_MED`) | 2024–2025 | soma da etapa por escola, como está no campo; a presença em 2024 vem da flag `censo_2024_presente`, nunca da oferta de 2025 | 1.360 linhas em 2024 (76 com célula vazia; 53 escolas de 2025 sem linha) e 1.291 em 2025 | L-28, L-43, L-48, L-62, L-63 |
 | 4 | Ideb por etapa | `ideb_escolas_df.parquet`, `indicador = ideb_observado` | 2005–2025, de dois em dois anos | valor observado; **a meta (`ideb_projetado`) não é publicada**; privada só até 2017 | 499 escolas com valor em 2025 | L-08, L-12, L-30, L-33, L-56 |
@@ -272,8 +272,9 @@ são publicadas; o Ideb, se existir, mantém o valor com `n: null`. `n_referenci
 só aparece quando o `n` é contagem de alunos e o ano da matrícula usada difere
 do ano do número: hoje, o Ideb de 2005–2023 leva `"n_referencia": "2025"`; o
 Ideb de 2025, matrícula, creche, oferta e infraestrutura não levam o campo.
-Matrícula, creche, oferta e infraestrutura têm `n = 1` (a escola), não uma
-contagem de alunos.
+Quando o `n` é `null`, não existe contagem de alunos e `n_referencia` também
+não aparece. Matrícula, creche, oferta e infraestrutura têm `n = 1` (a escola),
+não uma contagem de alunos.
 
 ### 5.3 Interface do build
 
@@ -394,9 +395,11 @@ do upload quando um critério executável regride.
 
 `--check` roda os critérios executáveis e os casos de limite e para no primeiro
 que falhar. Cada um tem o comando manual equivalente, para quando o `--check`
-discordar de uma pessoa. A amostra de 10 páginas é determinística: os 7 perfis
-do §4 mais as 3 primeiras escolas, em ordem de `sha256(co_entidade)`, que não
-sejam perfis — outra pessoa chega às mesmas 10.
+discordar de uma pessoa. O `--check` varre todas as 1.291 páginas nos critérios
+1, 3 e 4, todo o HTML e o índice no critério 2, todo o `site/dados` no critério
+6 e faz um segundo build no critério 5; não há amostra de 10 páginas. Os sete
+perfis do §4 entram na conferência manual e os casos de limite no
+`check_casos_limite`.
 
 **1. Procedência completa.** Todo número visível tem entrada em
 `dados/<CO_ENTIDADE>.json` com `fonte`, `arquivo`, `ano`, `calculo`, `n` e
@@ -404,7 +407,8 @@ sejam perfis — outra pessoa chega às mesmas 10.
 família cujo n é contagem de alunos e a página mostra a matrícula ausente. Nas
 taxas (fluxo, TDI, TNR), o estado é `ausente`; no Ideb, o valor observado pode
 continuar com `n: null`. `n_referencia` é exigido exatamente quando o n é
-contagem de alunos de outro ano (Ideb de 2005–2023 → `"2025"`).
+contagem de alunos de outro ano (Ideb de 2005–2023 → `"2025"`) e não aparece
+quando o n é `null`.
 
 ```bash
 python scripts/12_build_site.py --public data/public --out site \

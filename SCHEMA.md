@@ -642,8 +642,9 @@ No `site/dados/<CO_ENTIDADE>.json`, cada número traz `n` inteiro ou `null`.
 existir, mantém o valor observado com `n: null`. A página mostra a matrícula `-`.
 `n_referencia` só aparece quando o `n` é contagem de alunos de outro ano: o Ideb
 de 2005–2023 leva `"n_referencia": "2025"`; Ideb de 2025, matrícula, creche,
-oferta e infraestrutura não levam o campo. O `n = 1` dessas quatro últimas
-famílias é a escola, não uma contagem de alunos.
+oferta e infraestrutura não levam o campo. Quando o `n` é `null`, não existe
+contagem de alunos e `n_referencia` também não aparece. O `n = 1` dessas quatro
+últimas famílias é a escola, não uma contagem de alunos.
 
 O export é determinístico e idempotente. Se o destino já tem um arquivo com
 sha256 diferente do que seria gravado, ele falha; `--force` sobrescreve e a

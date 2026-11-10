@@ -480,7 +480,7 @@ class PaginaEscola:
 
     def ideb_cell(self, etapa: str, ano: str, n: int | None) -> str:
         reg = indicador(self.d, self.e["co"], etapa, "ideb_observado", ano)
-        n_referencia = "2025" if str(ano) != "2025" else None
+        n_referencia = "2025" if str(ano) != "2025" and n is not None else None
         if reg["estado"] == "valor" and reg["valor"] is not None:
             valor = float(reg["valor"])
             estado = "zero" if valor == 0 else "valor"
@@ -1417,7 +1417,9 @@ def check_procedencia(site: Path, dados: dict, data_build: str) -> str:
             if not str(numero["arquivo"]).startswith("data/public/"):
                 raise BuildError(f"{escola['co']}: {identificador} aponta para fora de data/public")
             exige_referencia = (
-                numero.get("bloco") in FAMILIAS_N_ALUNOS and str(numero.get("ano")) != "2025"
+                numero.get("bloco") in FAMILIAS_N_ALUNOS
+                and str(numero.get("ano")) != "2025"
+                and n is not None
             )
             if exige_referencia and numero.get("n_referencia") != "2025":
                 raise BuildError(
@@ -1668,7 +1670,8 @@ def check_casos_limite(public: Path, data_build: str) -> str:
         if numero(p, "matricula-ai-2024")["estado"] != "ausente":
             raise BuildError("53013662: matrícula de 2024 não está ausente")
 
-        # 3. 2025 sem matrícula: sem taxa, n = -, Ideb n null e n_referencia.
+        # 3. 2025 sem matrícula: sem taxa, n = -, Ideb com n null. n_referencia
+        #    só aparece nas linhas históricas com n presente (teste 3b).
         p, markup, texto = pagina("53000854", 30)
         if FRASE_MATRICULA_2025 not in texto:
             raise BuildError("53000854: falta 'matrícula não declarada no Censo de 2025'")
@@ -1690,8 +1693,24 @@ def check_casos_limite(public: Path, data_build: str) -> str:
                 else:
                     if item["n"] is not None:
                         raise BuildError("53000854: Ideb histórico deveria ter n null")
-                    if item.get("n_referencia") != "2025":
-                        raise BuildError("53000854: Ideb histórico sem n_referencia 2025")
+                    if "n_referencia" in item:
+                        raise BuildError(
+                            "53000854: Ideb histórico com n null não leva n_referencia"
+                        )
+
+        # 3b. Ideb histórico com n presente continua carimbando o ano do n.
+        for item in p.numeros:
+            if (
+                item["bloco"] == "ideb"
+                and item["etapa"] == "anos finais"
+                and item["ano"] != "2025"
+            ):
+                if item["n"] != 138:
+                    raise BuildError("53000854: Ideb histórico de AF deveria ter n = 138")
+                if item.get("n_referencia") != "2025":
+                    raise BuildError(
+                        "53000854: Ideb histórico de AF sem n_referencia 2025"
+                    )
 
         # 4. Creche 2025 ausente usa a frase de 2025; 2024 presente não a usa.
         p, markup, texto = pagina("53000781", 30)
