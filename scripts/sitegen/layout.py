@@ -1,6 +1,6 @@
 """Documento HTML comum a todas as páginas.
 
-Entrada: título, corpo, carimbo do build e limiar de n.
+Entrada: título, corpo, carimbo do build, limiar de n e markup extra de `<head>`.
 Saída: o HTML completo com cabeçalho e rodapé.
 Idempotente: sim — função pura."""
 
@@ -9,14 +9,14 @@ from __future__ import annotations
 import html
 
 
-def document(title: str, body: str, data_build: str, threshold: int) -> str:
+def document(title: str, body: str, data_build: str, threshold: int, head_extra: str = "") -> str:
     return f"""<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)}</title>
-<link rel="stylesheet" href="estilo.css">
+<link rel="stylesheet" href="estilo.css">{head_extra}
 </head>
 <body>
 <header class="topo">

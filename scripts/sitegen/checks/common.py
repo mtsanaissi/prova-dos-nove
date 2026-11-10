@@ -29,6 +29,19 @@ def number_ids(markup: str) -> list[str]:
     return re.findall(r'data-numero="([^"]+)"', markup)
 
 
+def require_equal_lists(
+    where: str, name_a: str, a: list[str], name_b: str, b: list[str]
+) -> None:
+    """Compara duas listas e falha na primeira divergência, com a posição."""
+    if len(a) != len(b):
+        raise BuildError(f"{where}: {len(a)} {name_a} contra {len(b)} {name_b}")
+    for position, (value_a, value_b) in enumerate(zip(a, b), start=1):
+        if value_a != value_b:
+            raise BuildError(
+                f"{where}: posição {position}: {name_a} {value_a!r} != {name_b} {value_b!r}"
+            )
+
+
 def site_hashes(site: Path) -> dict[str, str]:
     return {
         str(p.relative_to(site)): sha256(p)

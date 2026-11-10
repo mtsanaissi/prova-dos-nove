@@ -12,6 +12,7 @@ from .errors import BuildError
 from .contract import STAGES, STAGE_LABEL, ENROLLMENT_LABEL, OFFERINGS, INFRA_ITEMS, IDEB_YEARS_BY_STAGE, PHRASE_STAGE_NOT_OFFERED, PHRASE_IDEB_PRIVATE, PHRASE_IDEB_PUBLIC, PHRASE_CENSUS_2024_NO_ROW, PHRASE_ENROLLMENT_2024, PHRASE_ENROLLMENT_2025, PHRASE_NO_INDICATOR, PHRASE_INFRA_NOT_APPLICABLE, PHRASE_SMALL_N
 from .fmt import fmt_int, fmt_dec, fmt_years, stage_slug, stage_title, student_word
 from .loader import get_indicator, has_published_ideb, has_rate_row
+from .region import region_label
 
 
 class SchoolPage:
@@ -213,7 +214,7 @@ class SchoolPage:
             '<main>'
             f'<p class="trilha"><a href="index.html">Todas as escolas</a></p>'
             f'<h1>{html.escape(e["nome"])}</h1>'
-            f'<p class="subtitulo">{html.escape(e["ra"])} · rede {html.escape(e["rede"])}</p>'
+            f'<p class="subtitulo">{html.escape(region_label(e["ra"]))} · rede {html.escape(e["rede"])}</p>'
         )
 
         offers_assessed_stage = any(e[offering] for _, _, offering in STAGES)
@@ -250,7 +251,7 @@ class SchoolPage:
         parts.append(
             "<dl class=\"ficha\">"
             f"<dt>Escola</dt><dd>{html.escape(e['nome'])}</dd>"
-            f"<dt>Região Administrativa</dt><dd>{html.escape(e['ra'])}</dd>"
+            f"<dt>Região Administrativa</dt><dd>{html.escape(region_label(e['ra']))}</dd>"
             f"<dt>Rede</dt><dd>{html.escape(e['rede'])}</dd>"
             f"<dt>Código INEP</dt><dd>{html.escape(code)}</dd>"
             "</dl>"

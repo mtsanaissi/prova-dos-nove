@@ -39,7 +39,7 @@ inteira, n = 1.
 
 | # | bloco | fonte e arquivo | ano | cálculo | n | limites |
 |---|---|---|---|---|---|---|
-| 1 | identificação | cadastro SEEDF, `escolas__relatorio_escolas_2025.parquet` (`Nome da escola`, `Nome RA`, `Nome Rede`) | 2025 | cópia do campo | 1.291 | L-36, L-37 |
+| 1 | identificação | cadastro SEEDF, `escolas__relatorio_escolas_2025.parquet` (`Nome da escola`, `Nome RA`, `Nome Rede`) | 2025 | cópia do campo; a RA sai como rótulo de exibição (§2.1) | 1.291 | L-36, L-37 |
 | 2 | oferta por etapa | mesmo cadastro, vetor `INF_CRE`…`PROF` (8 sinalizadores) | 2025 | flag 1 = oferta; **não** traduzir "é EI" | 1.291 | L-57, L-36 |
 | 3 | matrícula por etapa | Censo INEP, `censo_escola_df.parquet` (`QT_MAT_INF_CRE`, `QT_MAT_FUND_AI`, `QT_MAT_FUND_AF`, `QT_MAT_MED`) | 2024–2025 | soma da etapa por escola, como está no campo; a presença em 2024 vem da flag `censo_2024_presente`, nunca da oferta de 2025 | 1.360 linhas em 2024 (76 com célula vazia; 53 escolas de 2025 sem linha) e 1.291 em 2025 | L-28, L-43, L-48, L-62, L-63 |
 | 4 | Ideb por etapa | `ideb_escolas_df.parquet`, `indicador = ideb_observado` | 2005–2025, de dois em dois anos | valor observado; **a meta (`ideb_projetado`) não é publicada**; privada só até 2017 | 499 escolas com valor em 2025 | L-08, L-12, L-30, L-33, L-56 |
@@ -91,14 +91,22 @@ Regras que valem para todos os blocos:
 
 ### 2.1 A página de entrada (`index.html`)
 
-A porta do site (decisão do mantenedor, 2026-11-06). Duas formas de chegar, na
+A porta do site (decisão do mantenedor, 2026-11-06). Três formas de chegar, na
 mesma página:
 
 - **busca por nome**: campo que filtra enquanto se digita, sem servidor, lendo
   `indice.json` no navegador;
+- **salto por Região Administrativa**: um `<select id="ir-ra">` com as 35 RAs em
+  ordem de rótulo, que leva à seção `#ra-<slug>` da RA escolhida;
 - **lista por Região Administrativa**: as 35 RAs em ordem alfabética, e dentro de
   cada uma as escolas em ordem alfabética, com nome e rede (estadual, privada
   conveniada, privada não conveniada, federal).
+
+O rótulo de exibição da RA ("Águas Claras", "Ceilândia", "Sol Nascente/Por do
+Sol") é só de tela: `data-ra`, `indice.json` e `data/public/escolas.parquet`
+mantêm o valor bruto do cadastro (`AGUAS CLARAS`, `CEILANDIA`,
+`SOL NASCENTE / POR DO SOL`), e o `#ra-<slug>` (`#ra-aguas-claras`,
+`#ra-ceilandia`) deriva desse valor bruto.
 
 Regras:
 
@@ -108,7 +116,9 @@ Regras:
   próprio.
 - Nenhuma ordenação por indicador; a ordem é alfabética em todos os níveis.
 - Sem JavaScript a lista por RA continua legível: o HTML é gerado com as 1.291
-  escolas; o JavaScript só filtra.
+  escolas; o JavaScript filtra e salta. O `<select>` fica escondido sem
+  JavaScript (`<noscript><style>` no `<head>` do índice) e o aviso do corpo diz
+  que busca e salto precisam de JavaScript, com a lista completa logo abaixo.
 - `indice.json` é `[{co_entidade, nome, ra, rede}]`, ordenado por `nome`, e é o
   único insumo da busca.
 
@@ -231,7 +241,7 @@ Regras do export, todas verificáveis:
 
 ```text
 site/
-├── index.html                     # busca por nome + lista por RA, sem número (§2.1)
+├── index.html                     # busca por nome + salto por RA + lista por RA, sem número (§2.1)
 ├── indice.json                    # [{co_entidade, nome, ra, rede}] — alimenta a busca
 ├── estilo.css                     # sem framework
 ├── creditos.html                  # licença por fonte e titular (critério 6)
@@ -389,21 +399,21 @@ repo. Tamanho: 1.291 páginas + o JSON por escola; o limite de site publicado é
 1 GB, e o build mede o total e falha se passar de 700 MB.
 
 **Escopo real do gate.** O passo do workflow roda `--check` e constrói `site/`
-antes do upload. Ele cobre os critérios 1–4 e 6, a metade de build do critério 5
-(idempotência) e os casos de limite. A outra metade do critério 5 — `06` sem
-etapa pulada — continua verificação local, porque `data/interim/` está fora do
-git (`.gitignore`) e o CI não tem como rodar as etapas. O `--check` falha antes
-do upload quando um critério executável regride.
+antes do upload. Ele cobre os critérios 1–4, 6 e 7, a metade de build do
+critério 5 (idempotência) e os casos de limite. A outra metade do critério 5 —
+`06` sem etapa pulada — continua verificação local, porque `data/interim/` está
+fora do git (`.gitignore`) e o CI não tem como rodar as etapas. O `--check`
+falha antes do upload quando um critério executável regride.
 
 ## 8. Critérios de saída da fase 1
 
 `--check` roda os critérios executáveis e os casos de limite e para no primeiro
 que falhar. Cada um tem o comando manual equivalente, para quando o `--check`
 discordar de uma pessoa. O `--check` varre todas as 1.291 páginas nos critérios
-1, 3 e 4, todo o HTML e o índice no critério 2, todo o `site/dados` no critério
-6 e faz um segundo build no critério 5; não há amostra de 10 páginas. Os sete
-perfis do §4 entram na conferência manual e os casos de limite no
-`check_edge_cases`.
+1, 3 e 4, todo o HTML e o índice no critério 2, o índice no critério 7, todo o
+`site/dados` no critério 6 e faz um segundo build no critério 5; não há amostra
+de 10 páginas. Os sete perfis do §4 entram na conferência manual e os casos de
+limite no `check_edge_cases`.
 
 **1. Procedência completa.** Todo número visível tem entrada em
 `dados/<CO_ENTIDADE>.json` com `fonte`, `arquivo`, `ano`, `calculo`, `n` e
@@ -471,6 +481,16 @@ quando uma família SEEDF resolve para conjunto ODbL (L-62).
 ```bash
 python scripts/12_build_site.py --public data/public --out site \
   --data-build 2026-11-06 --check-licencas
+```
+
+**7. Sumário por RA.** O `index.html` tem um `<select id="ir-ra">` com uma opção
+para cada `#ra-<slug>` das 35 seções, na mesma ordem e com o mesmo rótulo, e
+nenhuma âncora se repete. O rótulo é de exibição; `data-ra` e `indice.json`
+mantêm o valor bruto (§2.1).
+
+```bash
+python scripts/12_build_site.py --public data/public --out site \
+  --data-build 2026-11-06 --check-sumario
 ```
 
 **Casos de limite.** O `--check` também roda a cópia do insumo com 2024 sem

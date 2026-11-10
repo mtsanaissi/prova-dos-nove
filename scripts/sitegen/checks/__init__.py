@@ -15,6 +15,7 @@ from .edge_cases import check_edge_cases
 from .licenses import check_licenses
 from .provenance import check_provenance
 from .ranking import check_no_ranking
+from .region_toc import check_region_toc
 from .reproducibility import check_reproducibility
 from .states import check_states
 from .threshold import check_threshold
@@ -49,6 +50,12 @@ CHECKS = (
         None,
         "critério 2: nenhum ranking no índice",
         lambda ctx: check_no_ranking(ctx.out),
+    ),
+    Check(
+        "sumario",
+        "--check-sumario",
+        "critério 7: salto por RA e seções na mesma ordem",
+        lambda ctx: check_region_toc(ctx.out),
     ),
     Check(
         "limiar",
