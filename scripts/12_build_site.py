@@ -34,18 +34,18 @@ from pathlib import Path
 
 import pandas as pd
 
-DATA_BUILD_PADRAO = "2026-11-06"
-LIMIAR_N_PADRAO = 30
-TAMANHO_MAXIMO_SITE = 700 * 1024 * 1024
+DEFAULT_DATA_BUILD = "2026-11-06"
+DEFAULT_N_THRESHOLD = 30
+MAX_SITE_BYTES = 700 * 1024 * 1024
 
-ETAPAS = [
+STAGES = [
     ("AI", "anos iniciais", "oferta_fund_ai"),
     ("AF", "anos finais", "oferta_fund_af"),
     ("EM", "ensino médio", "oferta_med"),
 ]
-ETAPA_LABEL = {codigo: label for codigo, label, _ in ETAPAS}
-ETAPA_SLUG = {"AI": "ai", "AF": "af", "EM": "em", "CRE": "creche"}
-MAT_COLS = {
+STAGE_LABEL = {stage_code: label for stage_code, label, _ in STAGES}
+STAGE_SLUG = {"AI": "ai", "AF": "af", "EM": "em", "CRE": "creche"}
+ENROLLMENT_COLUMNS = {
     ("CRE", "2024"): "mat_inf_cre_2024",
     ("CRE", "2025"): "mat_inf_cre_2025",
     ("AI", "2024"): "mat_fund_ai_2024",
@@ -55,8 +55,8 @@ MAT_COLS = {
     ("EM", "2024"): "mat_med_2024",
     ("EM", "2025"): "mat_med_2025",
 }
-MAT_LABEL = {"CRE": "creche", "AI": "anos iniciais", "AF": "anos finais", "EM": "ensino médio"}
-OFERTAS = [
+ENROLLMENT_LABEL = {"CRE": "creche", "AI": "anos iniciais", "AF": "anos finais", "EM": "ensino médio"}
+OFFERINGS = [
     ("oferta_inf_cre", "Creche"),
     ("oferta_inf_pre", "Pré-escola"),
     ("oferta_fund_ai", "Anos iniciais do ensino fundamental"),
@@ -66,7 +66,7 @@ OFERTAS = [
     ("oferta_esp", "Educação especial"),
     ("oferta_prof", "Educação profissional"),
 ]
-INFRA_ITENS = [
+INFRA_ITEMS = [
     ("IN_BIBLIOTECA", "Biblioteca"),
     ("IN_SALA_LEITURA", "Sala de leitura"),
     ("IN_QUADRA_ESPORTES", "Quadra de esportes"),
@@ -76,31 +76,31 @@ INFRA_ITENS = [
     ("IN_REFEITORIO", "Refeitório"),
     ("IN_BANHEIRO_PNE", "Banheiro acessível (cadeirante)"),
 ]
-ANOS_IDEB = [str(ano) for ano in range(2005, 2026, 2)]
-ANOS_IDEB_ETAPA = {"AI": ANOS_IDEB, "AF": ANOS_IDEB, "EM": ["2017", "2019", "2021", "2023", "2025"]}
-REDES = {"federal", "estadual", "privada conveniada", "privada não conveniada"}
-ESTADOS = {"valor", "zero", "ausente", "nao_aplicavel"}
+IDEB_YEARS = [str(year) for year in range(2005, 2026, 2)]
+IDEB_YEARS_BY_STAGE = {"AI": IDEB_YEARS, "AF": IDEB_YEARS, "EM": ["2017", "2019", "2021", "2023", "2025"]}
+NETWORKS = {"federal", "estadual", "privada conveniada", "privada não conveniada"}
+STATES = {"valor", "zero", "ausente", "nao_aplicavel"}
 
-FRASE_ETAPA = "— esta etapa não é ofertada pela escola em 2025"
-FRASE_IDEB_PRIVADA = "sem Ideb: a INEP não publica resultado de escola privada depois de 2017"
-FRASE_IDEB_PUBLICA = (
+PHRASE_STAGE_NOT_OFFERED = "— esta etapa não é ofertada pela escola em 2025"
+PHRASE_IDEB_PRIVATE = "sem Ideb: a INEP não publica resultado de escola privada depois de 2017"
+PHRASE_IDEB_PUBLIC = (
     "sem Ideb em 2025: a INEP não publica quando há menos de 10 alunos na prova "
     "ou participação abaixo de 80%, e não informa qual foi o caso"
 )
-FRASE_CENSO_2024_SEM_LINHA = "a escola não consta do Censo de 2024"
-FRASE_MATRICULA_2024 = "matrícula não declarada no Censo de 2024"
-FRASE_MATRICULA_2025 = "matrícula não declarada no Censo de 2025"
-FRASE_SEM_INDICADOR = "esta escola não tem Ideb nem taxas publicadas em 2025"
-FRASE_INFRA_NAO_APLICAVEL = (
+PHRASE_CENSUS_2024_NO_ROW = "a escola não consta do Censo de 2024"
+PHRASE_ENROLLMENT_2024 = "matrícula não declarada no Censo de 2024"
+PHRASE_ENROLLMENT_2025 = "matrícula não declarada no Censo de 2025"
+PHRASE_NO_INDICATOR = "esta escola não tem Ideb nem taxas publicadas em 2025"
+PHRASE_INFRA_NOT_APPLICABLE = (
     "a infraestrutura é publicada para as escolas que oferecem ensino fundamental ou médio"
 )
-FRASE_N_PEQUENA = "nesta etapa — o indicador não é publicado quando a turma é pequena"
+PHRASE_SMALL_N = "nesta etapa — o indicador não é publicado quando a turma é pequena"
 
 # Famílias cujo n é contagem de alunos (e não a própria escola). Só nelas o
 # JSON admite n = null e o campo n_referencia.
-FAMILIAS_N_ALUNOS = {"ideb", "fluxo", "tdi", "tnr"}
-SLUG_POR_ETAPA_LABEL = {
-    label: ETAPA_SLUG[codigo] for codigo, label, _ in ETAPAS
+STUDENT_COUNT_FAMILIES = {"ideb", "fluxo", "tdi", "tnr"}
+SLUG_BY_STAGE_LABEL = {
+    label: STAGE_SLUG[stage_code] for stage_code, label, _ in STAGES
 }
 
 
@@ -112,71 +112,71 @@ class BuildError(Exception):
 # Leitura e validação do insumo público
 
 
-def _sha256(path: Path) -> str:
+def sha256(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as fh:
-        for bloco in iter(lambda: fh.read(1 << 20), b""):
-            h.update(bloco)
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
     return h.hexdigest()
 
 
-def _int_ou_none(valor) -> int | None:
-    return None if valor is None or pd.isna(valor) else int(valor)
+def _int_or_none(value) -> int | None:
+    return None if value is None or pd.isna(value) else int(value)
 
 
-def _registros_por_familia(procedencia: dict) -> dict[str, dict]:
-    registros = procedencia.get("registros")
-    if not isinstance(registros, list) or not registros:
+def _records_by_family(provenance: dict) -> dict[str, dict]:
+    records = provenance.get("registros")
+    if not isinstance(records, list) or not records:
         raise BuildError("procedencia.json sem a lista 'registros'")
-    mapa = {}
-    licencas_por_fonte: dict[str, tuple[str, str | None]] = {}
-    for registro in registros:
-        familia = registro.get("familia")
-        if not familia or familia in mapa:
-            raise BuildError(f"procedencia.json com família ausente ou duplicada: {familia!r}")
-        for campo in ("fonte", "arquivo", "calculo", "licenca"):
-            if not registro.get(campo):
-                raise BuildError(f"registro {familia!r} sem {campo}")
-        if "licenca_url" not in registro:
-            raise BuildError(f"registro {familia!r} sem licenca_url (pode ser null)")
-        if not registro.get("limites"):
-            raise BuildError(f"registro {familia!r} sem limites")
-        chave = (registro["licenca"], registro["licenca_url"])
-        anterior = licencas_por_fonte.setdefault(registro["fonte"], chave)
-        if anterior != chave:
+    mapping = {}
+    licenses_by_source: dict[str, tuple[str, str | None]] = {}
+    for record in records:
+        family = record.get("familia")
+        if not family or family in mapping:
+            raise BuildError(f"procedencia.json com família ausente ou duplicada: {family!r}")
+        for field in ("fonte", "arquivo", "calculo", "licenca"):
+            if not record.get(field):
+                raise BuildError(f"registro {family!r} sem {field}")
+        if "licenca_url" not in record:
+            raise BuildError(f"registro {family!r} sem licenca_url (pode ser null)")
+        if not record.get("limites"):
+            raise BuildError(f"registro {family!r} sem limites")
+        key = (record["licenca"], record["licenca_url"])
+        previous = licenses_by_source.setdefault(record["fonte"], key)
+        if previous != key:
             raise BuildError(
-                f"famílias da fonte {registro['fonte']!r} divergem em licença: "
-                f"{anterior!r} × {chave!r}"
+                f"famílias da fonte {record['fonte']!r} divergem em licença: "
+                f"{previous!r} × {key!r}"
             )
-        mapa[familia] = registro
-    return mapa
+        mapping[family] = record
+    return mapping
 
 
-def carregar_dados(public: Path) -> dict:
+def load_data(public: Path) -> dict:
     """Lê e valida `data/public/`; devolve o modelo usado por todas as páginas."""
     public = Path(public)
     if not public.is_dir():
         raise BuildError(f"data/public não existe: {public} (rode 06_analysis.py --public)")
-    for nome in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet", "procedencia.json"):
-        if not (public / nome).is_file():
-            raise BuildError(f"falta {public / nome} (rode 06_analysis.py --public)")
+    for name in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet", "procedencia.json"):
+        if not (public / name).is_file():
+            raise BuildError(f"falta {public / name} (rode 06_analysis.py --public)")
 
-    procedencia = json.loads((public / "procedencia.json").read_text(encoding="utf-8"))
-    hashes = procedencia.get("sha256")
+    provenance = json.loads((public / "procedencia.json").read_text(encoding="utf-8"))
+    hashes = provenance.get("sha256")
     if not isinstance(hashes, dict):
         raise BuildError("procedencia.json sem o mapa 'sha256' dos parquets")
-    for nome in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet"):
-        if not hashes.get(nome):
-            raise BuildError(f"procedencia.json sem sha256 de {nome}")
-        real = _sha256(public / nome)
-        if real != hashes[nome]:
+    for name in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet"):
+        if not hashes.get(name):
+            raise BuildError(f"procedencia.json sem sha256 de {name}")
+        actual = sha256(public / name)
+        if actual != hashes[name]:
             raise BuildError(
-                f"sha256 de {nome} não confere: registrado {hashes[nome]}, arquivo {real}. "
+                f"sha256 de {name} não confere: registrado {hashes[name]}, arquivo {actual}. "
                 "Rode 06_analysis.py --public novamente."
             )
 
-    escolas_df = pd.read_parquet(public / "escolas.parquet")
-    for coluna in (
+    schools_df = pd.read_parquet(public / "escolas.parquet")
+    for column in (
         "co_entidade", "nome", "ra", "rede", "rede_cadastro",
         "censo_2024_presente",
         "oferta_inf_cre", "oferta_inf_pre", "oferta_fund_ai", "oferta_fund_af",
@@ -184,133 +184,133 @@ def carregar_dados(public: Path) -> dict:
         "mat_inf_cre_2024", "mat_fund_ai_2024", "mat_fund_af_2024", "mat_med_2024",
         "mat_inf_cre_2025", "mat_fund_ai_2025", "mat_fund_af_2025", "mat_med_2025",
     ):
-        if coluna not in escolas_df:
-            raise BuildError(f"escolas.parquet sem a coluna {coluna}")
+        if column not in schools_df:
+            raise BuildError(f"escolas.parquet sem a coluna {column}")
 
-    escolas = []
-    for r in escolas_df.to_dict("records"):
-        co = str(r["co_entidade"]).strip()
-        if not co:
+    schools = []
+    for r in schools_df.to_dict("records"):
+        code = str(r["co_entidade"]).strip()
+        if not code:
             raise BuildError("escolas.parquet com co_entidade vazio")
-        if len(co) < 8:
-            co = co.zfill(8)
-        if r["rede"] not in REDES:
-            raise BuildError(f"escola {co} com rede fora do contrato: {r['rede']!r}")
+        if len(code) < 8:
+            code = code.zfill(8)
+        if r["rede"] not in NETWORKS:
+            raise BuildError(f"escola {code} com rede fora do contrato: {r['rede']!r}")
         if pd.isna(r["censo_2024_presente"]):
-            raise BuildError(f"escola {co} sem censo_2024_presente")
-        escola = {
-            "co": co,
+            raise BuildError(f"escola {code} sem censo_2024_presente")
+        school = {
+            "co": code,
             "nome": str(r["nome"]).strip(),
             "ra": str(r["ra"]).strip(),
             "rede": r["rede"],
             "rede_cadastro": str(r["rede_cadastro"]).strip(),
             "censo_2024_presente": bool(r["censo_2024_presente"]),
         }
-        for coluna, _ in OFERTAS:
-            escola[coluna] = int(r[coluna]) if not pd.isna(r[coluna]) else 0
-        for (etapa, ano), coluna in MAT_COLS.items():
-            escola[f"mat_{etapa}_{ano}"] = _int_ou_none(r[coluna])
-        if not escola["censo_2024_presente"]:
-            preenchidas = [
-                etapa for etapa in ("CRE", "AI", "AF", "EM")
-                if escola.get(f"mat_{etapa}_2024") is not None
+        for column, _ in OFFERINGS:
+            school[column] = int(r[column]) if not pd.isna(r[column]) else 0
+        for (stage, year), column in ENROLLMENT_COLUMNS.items():
+            school[f"mat_{stage}_{year}"] = _int_or_none(r[column])
+        if not school["censo_2024_presente"]:
+            filled = [
+                stage for stage in ("CRE", "AI", "AF", "EM")
+                if school.get(f"mat_{stage}_2024") is not None
             ]
-            if preenchidas:
+            if filled:
                 raise BuildError(
-                    f"escola {co} sem linha no Censo 2024 com matrícula de 2024: "
-                    + ", ".join(preenchidas)
+                    f"escola {code} sem linha no Censo 2024 com matrícula de 2024: "
+                    + ", ".join(filled)
                 )
-        escolas.append(escola)
-    escolas.sort(key=lambda e: e["co"])
+        schools.append(school)
+    schools.sort(key=lambda e: e["co"])
 
-    por_co = {}
-    for escola in escolas:
-        if escola["co"] in por_co:
-            raise BuildError(f"escolas.parquet com CO_ENTIDADE duplicado: {escola['co']}")
-        por_co[escola["co"]] = escola
+    by_code = {}
+    for school in schools:
+        if school["co"] in by_code:
+            raise BuildError(f"escolas.parquet com CO_ENTIDADE duplicado: {school['co']}")
+        by_code[school["co"]] = school
 
-    indicadores = {}
-    indicadores_df = pd.read_parquet(public / "indicadores.parquet")
-    for r in indicadores_df.to_dict("records"):
-        co = str(r["co_entidade"]).strip()
-        etapa = str(r["etapa"])
-        indicador = str(r["indicador"])
-        ano = str(r["ano"])
-        estado = str(r["estado"])
-        if co not in por_co:
-            raise BuildError(f"indicador de escola fora do cadastro: {co}")
-        if etapa not in ETAPA_LABEL:
-            raise BuildError(f"indicador com etapa fora do contrato: {etapa!r}")
-        if estado not in ESTADOS:
-            raise BuildError(f"indicador com estado fora do contrato: {estado!r}")
-        valor = None if pd.isna(r["valor"]) else float(r["valor"])
-        if estado in ("valor", "zero") and valor is None:
-            raise BuildError(f"indicador {co}/{etapa}/{indicador}/{ano} com estado {estado} e valor nulo")
-        if estado in ("ausente", "nao_aplicavel") and valor is not None:
-            raise BuildError(f"indicador {co}/{etapa}/{indicador}/{ano} com estado {estado} e valor")
-        chave = (co, etapa, indicador, ano)
-        if chave in indicadores:
-            raise BuildError(f"indicador duplicado: {chave}")
-        indicadores[chave] = {"valor": valor, "estado": estado}
+    indicators = {}
+    indicators_df = pd.read_parquet(public / "indicadores.parquet")
+    for r in indicators_df.to_dict("records"):
+        code = str(r["co_entidade"]).strip()
+        stage = str(r["etapa"])
+        indicator = str(r["indicador"])
+        year = str(r["ano"])
+        state = str(r["estado"])
+        if code not in by_code:
+            raise BuildError(f"indicador de escola fora do cadastro: {code}")
+        if stage not in STAGE_LABEL:
+            raise BuildError(f"indicador com etapa fora do contrato: {stage!r}")
+        if state not in STATES:
+            raise BuildError(f"indicador com estado fora do contrato: {state!r}")
+        value = None if pd.isna(r["valor"]) else float(r["valor"])
+        if state in ("valor", "zero") and value is None:
+            raise BuildError(f"indicador {code}/{stage}/{indicator}/{year} com estado {state} e valor nulo")
+        if state in ("ausente", "nao_aplicavel") and value is not None:
+            raise BuildError(f"indicador {code}/{stage}/{indicator}/{year} com estado {state} e valor")
+        key = (code, stage, indicator, year)
+        if key in indicators:
+            raise BuildError(f"indicador duplicado: {key}")
+        indicators[key] = {"valor": value, "estado": state}
 
     infra = {}
     infra_df = pd.read_parquet(public / "infraestrutura.parquet")
     for r in infra_df.to_dict("records"):
-        co = str(r["co_entidade"]).strip()
+        code = str(r["co_entidade"]).strip()
         item = str(r["item"])
-        estado = str(r["estado"])
-        if co not in por_co:
-            raise BuildError(f"infraestrutura de escola fora do cadastro: {co}")
-        if estado not in ESTADOS:
-            raise BuildError(f"infraestrutura com estado fora do contrato: {estado!r}")
-        valor = _int_ou_none(r["valor"])
-        if estado == "valor" and valor not in (0, 1):
-            raise BuildError(f"infraestrutura {co}/{item} com valor fora de 0/1: {valor!r}")
-        infra[(co, item)] = {"valor": valor, "estado": estado, "ano": str(r["ano"])}
+        state = str(r["estado"])
+        if code not in by_code:
+            raise BuildError(f"infraestrutura de escola fora do cadastro: {code}")
+        if state not in STATES:
+            raise BuildError(f"infraestrutura com estado fora do contrato: {state!r}")
+        value = _int_or_none(r["valor"])
+        if state == "valor" and value not in (0, 1):
+            raise BuildError(f"infraestrutura {code}/{item} com valor fora de 0/1: {value!r}")
+        infra[(code, item)] = {"valor": value, "estado": state, "ano": str(r["ano"])}
 
-    execucao = procedencia.get("execucao") or {}
-    etapas_puladas = execucao.get("etapas_puladas") if isinstance(execucao, dict) else None
-    if etapas_puladas is None:
-        etapas_puladas = []
-    if not isinstance(etapas_puladas, list):
+    execution = provenance.get("execucao") or {}
+    skipped_steps = execution.get("etapas_puladas") if isinstance(execution, dict) else None
+    if skipped_steps is None:
+        skipped_steps = []
+    if not isinstance(skipped_steps, list):
         raise BuildError("procedencia.json com execucao.etapas_puladas fora de lista")
-    if etapas_puladas:
+    if skipped_steps:
         print(
             "AVISO: o insumo público foi exportado com --parcial e tem etapa(s) "
-            "pulada(s): " + ", ".join(str(e) for e in etapas_puladas)
+            "pulada(s): " + ", ".join(str(e) for e in skipped_steps)
         )
 
     return {
-        "escolas": escolas,
-        "por_co": por_co,
-        "indicadores": indicadores,
+        "escolas": schools,
+        "por_co": by_code,
+        "indicadores": indicators,
         "infra": infra,
-        "procedencia": procedencia,
-        "registros": _registros_por_familia(procedencia),
+        "procedencia": provenance,
+        "registros": _records_by_family(provenance),
         "hashes": hashes,
-        "etapas_puladas": [str(e) for e in etapas_puladas],
+        "etapas_puladas": [str(e) for e in skipped_steps],
     }
 
 
-def indicador(dados: dict, co: str, etapa: str, nome: str, ano: str = "2025") -> dict:
+def get_indicator(data: dict, code: str, stage: str, name: str, year: str = "2025") -> dict:
     """Devolve o registro do indicador ou `ausente` quando não existe linha."""
-    return dados["indicadores"].get((co, etapa, nome, str(ano)), {"valor": None, "estado": "ausente"})
+    return data["indicadores"].get((code, stage, name, str(year)), {"valor": None, "estado": "ausente"})
 
 
-def tem_ideb_publicado(dados: dict, escola: dict) -> bool:
+def has_published_ideb(data: dict, school: dict) -> bool:
     return any(
-        escola[oferta]
-        and indicador(dados, escola["co"], etapa, "ideb_observado")["estado"] == "valor"
-        for etapa, _, oferta in ETAPAS
+        school[offering]
+        and get_indicator(data, school["co"], stage, "ideb_observado")["estado"] == "valor"
+        for stage, _, offering in STAGES
     )
 
 
-def tem_linha_de_taxa(dados: dict, escola: dict) -> bool:
-    for etapa, _, oferta in ETAPAS:
-        if not escola[oferta]:
+def has_rate_row(data: dict, school: dict) -> bool:
+    for stage, _, offering in STAGES:
+        if not school[offering]:
             continue
-        for nome in ("tdi", "tnr", "aprovacao", "reprovacao", "abandono"):
-            if (escola["co"], etapa, nome, "2025") in dados["indicadores"]:
+        for name in ("tdi", "tnr", "aprovacao", "reprovacao", "abandono"):
+            if (school["co"], stage, name, "2025") in data["indicadores"]:
                 return True
     return False
 
@@ -319,492 +319,492 @@ def tem_linha_de_taxa(dados: dict, escola: dict) -> bool:
 # Formatação e HTML
 
 
-def fmt_int(valor) -> str:
-    return f"{int(valor):,}".replace(",", ".")
+def fmt_int(value) -> str:
+    return f"{int(value):,}".replace(",", ".")
 
 
-def fmt_dec(valor) -> str:
-    return f"{float(valor):.1f}".replace(".", ",")
+def fmt_dec(value) -> str:
+    return f"{float(value):.1f}".replace(".", ",")
 
 
-def fmt_anos(anos) -> str:
-    anos = [str(a) for a in anos]
-    if not anos:
+def fmt_years(years) -> str:
+    years = [str(a) for a in years]
+    if not years:
         return ""
-    if anos == ANOS_IDEB:
+    if years == IDEB_YEARS:
         return "2005–2025, de dois em dois anos"
-    if len(anos) == 1:
-        return anos[0]
-    if len(anos) == 2 and int(anos[1]) - int(anos[0]) == 1:
-        return f"{anos[0]}–{anos[1]}"
-    return ", ".join(anos)
+    if len(years) == 1:
+        return years[0]
+    if len(years) == 2 and int(years[1]) - int(years[0]) == 1:
+        return f"{years[0]}–{years[1]}"
+    return ", ".join(years)
 
 
-def slug_etapa(etapa: str) -> str:
-    return ETAPA_SLUG.get(etapa, etapa.lower())
+def stage_slug(stage: str) -> str:
+    return STAGE_SLUG.get(stage, stage.lower())
 
 
-def titulo_etapa(rotulo: str) -> str:
-    return rotulo[:1].upper() + rotulo[1:]
+def stage_title(label: str) -> str:
+    return label[:1].upper() + label[1:]
 
 
-def palavra_aluno(n: int | None) -> str:
+def student_word(n: int | None) -> str:
     return "aluno" if n == 1 else "alunos"
 
 
-class PaginaEscola:
+class SchoolPage:
     """Uma página de escola e o coletor de procedência dos números dela."""
 
-    def __init__(self, dados: dict, escola: dict, data_build: str, limiar: int):
-        self.d = dados
-        self.e = escola
+    def __init__(self, data: dict, school: dict, data_build: str, threshold: int):
+        self.d = data
+        self.e = school
         self.data_build = data_build
-        self.limiar = limiar
-        self.numeros: list[dict] = []
-        self.por_id: dict[str, dict] = {}
-        self.mat_cache: dict[tuple[str, str], str] = {}
+        self.threshold = threshold
+        self.numbers: list[dict] = []
+        self.by_id: dict[str, dict] = {}
+        self.enrollment_cache: dict[tuple[str, str], str] = {}
 
     def _add(
         self,
         *,
         id: str,
-        familia: str,
-        bloco: str,
-        etapa: str,
-        ano: str,
-        valor,
-        estado: str,
+        family: str,
+        block: str,
+        stage: str,
+        year: str,
+        value,
+        state: str,
         n: int | None,
-        texto: str,
-        limites: list[str] | None = None,
-        n_referencia: str | None = None,
+        text: str,
+        limits: list[str] | None = None,
+        n_reference: str | None = None,
     ) -> str:
-        registro = self.d["registros"][familia]
-        if id in self.por_id:
-            atual = self.por_id[id]
-            if atual["valor"] != valor or atual["estado"] != estado:
+        record = self.d["registros"][family]
+        if id in self.by_id:
+            current = self.by_id[id]
+            if current["valor"] != value or current["estado"] != state:
                 raise BuildError(f"número {id} reaparece com valor/estado diferente")
-            return f'<span class="num" data-numero="{html.escape(id)}" data-estado="{estado}">{texto}</span>'
-        registro_numero = {
+            return f'<span class="num" data-numero="{html.escape(id)}" data-estado="{state}">{text}</span>'
+        number_record = {
             "id": id,
-            "bloco": bloco,
-            "etapa": etapa,
-            "ano": str(ano),
-            "valor": valor,
-            "estado": estado,
-            "fonte": registro["fonte"],
-            "arquivo": registro["arquivo"],
-            "calculo": registro["calculo"],
+            "bloco": block,
+            "etapa": stage,
+            "ano": str(year),
+            "valor": value,
+            "estado": state,
+            "fonte": record["fonte"],
+            "arquivo": record["arquivo"],
+            "calculo": record["calculo"],
             "n": int(n) if n is not None else None,
-            "limites": list(limites if limites is not None else registro["limites"]),
+            "limites": list(limits if limits is not None else record["limites"]),
         }
-        if n_referencia is not None:
-            registro_numero["n_referencia"] = str(n_referencia)
-        self.por_id[id] = registro_numero
-        self.numeros.append(registro_numero)
-        return f'<span class="num" data-numero="{html.escape(id)}" data-estado="{estado}">{texto}</span>'
+        if n_reference is not None:
+            number_record["n_referencia"] = str(n_reference)
+        self.by_id[id] = number_record
+        self.numbers.append(number_record)
+        return f'<span class="num" data-numero="{html.escape(id)}" data-estado="{state}">{text}</span>'
 
-    def mat_span(self, etapa: str, ano: str, familia: str = "matricula") -> str:
+    def enrollment_span(self, stage: str, year: str, family: str = "matricula") -> str:
         """Renderiza a matrícula da etapa/ano e registra o estado no JSON.
 
         A frase da ausência não sai daqui: o bloco a renderiza uma vez, com
-        `mat_ausencias`, porque o motivo depende da presença da escola no Censo
+        `enrollment_absences`, porque o motivo depende da presença da escola no Censo
         de 2024 e do ano.
         """
-        chave = (familia, etapa, str(ano))
-        if chave in self.mat_cache:
-            return self.mat_cache[chave]
-        valor = self.e.get(f"mat_{etapa}_{ano}")
-        if familia == "creche":
-            id_numero = f"creche-{ano}"
-            bloco = "creche"
-            etapa_label = "creche"
+        key = (family, stage, str(year))
+        if key in self.enrollment_cache:
+            return self.enrollment_cache[key]
+        value = self.e.get(f"mat_{stage}_{year}")
+        if family == "creche":
+            number_id = f"creche-{year}"
+            block = "creche"
+            stage_label = "creche"
         else:
-            id_numero = f"matricula-{slug_etapa(etapa)}-{ano}"
-            bloco = "matricula"
-            etapa_label = MAT_LABEL[etapa]
-        if valor is None:
-            html_num = self._add(
-                id=id_numero, familia=familia, bloco=bloco, etapa=etapa_label,
-                ano=ano, valor=None, estado="ausente", n=1, texto="-",
+            number_id = f"matricula-{stage_slug(stage)}-{year}"
+            block = "matricula"
+            stage_label = ENROLLMENT_LABEL[stage]
+        if value is None:
+            number_html = self._add(
+                id=number_id, family=family, block=block, stage=stage_label,
+                year=year, value=None, state="ausente", n=1, text="-",
             )
-        elif int(valor) == 0:
-            html_num = self._add(
-                id=id_numero, familia=familia, bloco=bloco, etapa=etapa_label,
-                ano=ano, valor=0, estado="zero", n=1, texto="0",
+        elif int(value) == 0:
+            number_html = self._add(
+                id=number_id, family=family, block=block, stage=stage_label,
+                year=year, value=0, state="zero", n=1, text="0",
             )
         else:
-            html_num = self._add(
-                id=id_numero, familia=familia, bloco=bloco, etapa=etapa_label,
-                ano=ano, valor=int(valor), estado="valor", n=1, texto=fmt_int(valor),
+            number_html = self._add(
+                id=number_id, family=family, block=block, stage=stage_label,
+                year=year, value=int(value), state="valor", n=1, text=fmt_int(value),
             )
-        self.mat_cache[chave] = html_num
-        return html_num
+        self.enrollment_cache[key] = number_html
+        return number_html
 
-    def mat_ausencias(self, familia: str, anos: tuple[str, ...], etapas: list[str]) -> str:
+    def enrollment_absences(self, family: str, years: tuple[str, ...], stages: list[str]) -> str:
         """Frases de ausência de matrícula, uma por motivo e por bloco."""
-        partes = []
-        for ano in anos:
-            faltantes = [
-                etapa for etapa in etapas if self.e.get(f"mat_{etapa}_{ano}") is None
+        parts = []
+        for year in years:
+            missing = [
+                stage for stage in stages if self.e.get(f"mat_{stage}_{year}") is None
             ]
-            if not faltantes:
+            if not missing:
                 continue
-            if str(ano) == "2024":
+            if str(year) == "2024":
                 if not self.e["censo_2024_presente"]:
-                    partes.append(
-                        self.ausencia(FRASE_CENSO_2024_SEM_LINHA, "L-63", "censo")
+                    parts.append(
+                        self.absence(PHRASE_CENSUS_2024_NO_ROW, "L-63", "censo")
                     )
                 else:
-                    partes.append(self.ausencia(FRASE_MATRICULA_2024, "L-28", "censo"))
+                    parts.append(self.absence(PHRASE_ENROLLMENT_2024, "L-28", "censo"))
             else:
-                partes.append(self.ausencia(FRASE_MATRICULA_2025, "L-28", "censo"))
-        return "".join(partes)
+                parts.append(self.absence(PHRASE_ENROLLMENT_2025, "L-28", "censo"))
+        return "".join(parts)
 
-    def rate_span(self, familia: str, nome: str, etapa: str, n: int | None, reg: dict) -> str:
-        valor = reg.get("valor")
-        estado = str(reg.get("estado", "ausente"))
-        if estado == "nao_aplicavel":
-            valor, texto = None, "—"
-        elif estado == "ausente" or valor is None:
-            estado, valor, texto = "ausente", None, "-"
-        elif float(valor) == 0:
-            estado, valor, texto = "zero", 0.0, "0,0%"
+    def rate_span(self, family: str, name: str, stage: str, n: int | None, entry: dict) -> str:
+        value = entry.get("valor")
+        state = str(entry.get("estado", "ausente"))
+        if state == "nao_aplicavel":
+            value, text = None, "—"
+        elif state == "ausente" or value is None:
+            state, value, text = "ausente", None, "-"
+        elif float(value) == 0:
+            state, value, text = "zero", 0.0, "0,0%"
         else:
-            estado, valor, texto = "valor", float(valor), fmt_dec(valor) + "%"
+            state, value, text = "valor", float(value), fmt_dec(value) + "%"
         return self._add(
-            id=f"{familia}-{slug_etapa(etapa)}-{nome}-2025",
-            familia=familia, bloco=familia, etapa=ETAPA_LABEL[etapa],
-            ano="2025", valor=valor, estado=estado, n=n, texto=texto,
+            id=f"{family}-{stage_slug(stage)}-{name}-2025",
+            family=family, block=family, stage=STAGE_LABEL[stage],
+            year="2025", value=value, state=state, n=n, text=text,
         )
 
-    def ideb_cell(self, etapa: str, ano: str, n: int | None) -> str:
-        reg = indicador(self.d, self.e["co"], etapa, "ideb_observado", ano)
-        n_referencia = "2025" if str(ano) != "2025" and n is not None else None
-        if reg["estado"] == "valor" and reg["valor"] is not None:
-            valor = float(reg["valor"])
-            estado = "zero" if valor == 0 else "valor"
-            texto = fmt_dec(valor)
+    def ideb_cell(self, stage: str, year: str, n: int | None) -> str:
+        entry = get_indicator(self.d, self.e["co"], stage, "ideb_observado", year)
+        n_reference = "2025" if str(year) != "2025" and n is not None else None
+        if entry["estado"] == "valor" and entry["valor"] is not None:
+            value = float(entry["valor"])
+            state = "zero" if value == 0 else "valor"
+            text = fmt_dec(value)
             return self._add(
-                id=f"ideb-{slug_etapa(etapa)}-{ano}", familia="ideb", bloco="ideb",
-                etapa=ETAPA_LABEL[etapa], ano=ano, valor=valor, estado=estado, n=n,
-                texto=texto, n_referencia=n_referencia,
+                id=f"ideb-{stage_slug(stage)}-{year}", family="ideb", block="ideb",
+                stage=STAGE_LABEL[stage], year=year, value=value, state=state, n=n,
+                text=text, n_reference=n_reference,
             )
-        if str(ano) == "2025":
+        if str(year) == "2025":
             return self._add(
-                id=f"ideb-{slug_etapa(etapa)}-2025", familia="ideb", bloco="ideb",
-                etapa=ETAPA_LABEL[etapa], ano="2025", valor=None, estado="ausente", n=n,
-                texto="-",
+                id=f"ideb-{stage_slug(stage)}-2025", family="ideb", block="ideb",
+                stage=STAGE_LABEL[stage], year="2025", value=None, state="ausente", n=n,
+                text="-",
             )
         return '<span class="simbolo" data-estado="ausente">-</span>'
 
-    def fonte(self, familia: str) -> str:
-        r = self.d["registros"][familia]
+    def source_note(self, family: str) -> str:
+        r = self.d["registros"][family]
         return (
             f'<p class="fonte">Fonte: {html.escape(r["fonte"])} · '
-            f'{html.escape(fmt_anos(r["anos"]))} · {html.escape(r["calculo"])} · '
+            f'{html.escape(fmt_years(r["anos"]))} · {html.escape(r["calculo"])} · '
             f'limites: {html.escape(", ".join(r["limites"]))} · '
             f'<a href="dados/{self.e["co"]}.json">procedência</a></p>'
         )
 
-    def ausencia(self, texto: str, ids: str, ancora: str, estado: str = "ausente") -> str:
-        simbolo = "—" if estado == "nao_aplicavel" else "-"
-        prefixo = ""
-        if not (texto.startswith("—") or texto.startswith("- ")):
-            prefixo = f'<span class="simbolo">{simbolo}</span> '
+    def absence(self, text: str, ids: str, anchor: str, state: str = "ausente") -> str:
+        symbol = "—" if state == "nao_aplicavel" else "-"
+        prefix = ""
+        if not (text.startswith("—") or text.startswith("- ")):
+            prefix = f'<span class="simbolo">{symbol}</span> '
         return (
-            f'<p class="ausencia" data-estado="{estado}">'
-            f'{prefixo}'
-            f'<span class="texto">{html.escape(texto)}</span> '
-            f'<a class="id-limite" href="como-ler.html#{ancora}">{html.escape(ids)}</a>'
+            f'<p class="ausencia" data-estado="{state}">'
+            f'{prefix}'
+            f'<span class="texto">{html.escape(text)}</span> '
+            f'<a class="id-limite" href="como-ler.html#{anchor}">{html.escape(ids)}</a>'
             "</p>"
         )
 
-    def pequena(self, etapa: str, n: int) -> str:
-        palavra = palavra_aluno(n)
+    def small_n(self, stage: str, n: int) -> str:
+        word = student_word(n)
         return (
             '<p class="suprimido" data-estado="suprimido">'
-            f'{self.mat_span(etapa, "2025")} '
-            f'<span class="texto">{palavra} {FRASE_N_PEQUENA}</span> '
+            f'{self.enrollment_span(stage, "2025")} '
+            f'<span class="texto">{word} {PHRASE_SMALL_N}</span> '
             '<a class="id-limite" href="como-ler.html#n">D4, L-40</a>'
             "</p>"
         )
 
-    def _cabecalho_bloco(self, titulo: str) -> str:
-        return f"<h2>{html.escape(titulo)}</h2>"
+    def _section_heading(self, title: str) -> str:
+        return f"<h2>{html.escape(title)}</h2>"
 
-    def _artigo(self, bloco: str, etapa: str, n: int | None, situacao: str, corpo: str) -> str:
+    def _stage_article(self, block: str, stage: str, n: int | None, status: str, body: str) -> str:
         n_attr = "" if n is None else f' data-n="{int(n)}"'
         return (
-            f'<article class="etapa" data-bloco="{bloco}" data-etapa="{etapa}"'
-            f'{n_attr} data-situacao="{situacao}">{corpo}</article>'
+            f'<article class="etapa" data-bloco="{block}" data-etapa="{stage}"'
+            f'{n_attr} data-situacao="{status}">{body}</article>'
         )
 
     def render(self) -> str:
         e = self.e
-        co = e["co"]
-        tem_ideb = tem_ideb_publicado(self.d, e)
-        tem_taxa = tem_linha_de_taxa(self.d, e)
+        code = e["co"]
+        has_ideb = has_published_ideb(self.d, e)
+        has_rate = has_rate_row(self.d, e)
 
-        partes = []
-        partes.append(
+        parts = []
+        parts.append(
             '<main>'
             f'<p class="trilha"><a href="index.html">Todas as escolas</a></p>'
             f'<h1>{html.escape(e["nome"])}</h1>'
             f'<p class="subtitulo">{html.escape(e["ra"])} · rede {html.escape(e["rede"])}</p>'
         )
 
-        oferece_etapa_avaliada = any(e[oferta] for _, _, oferta in ETAPAS)
-        if oferece_etapa_avaliada and not tem_ideb and not tem_taxa:
-            partes.append(self.ausencia(FRASE_SEM_INDICADOR, "L-09", "ideb"))
+        offers_assessed_stage = any(e[offering] for _, _, offering in STAGES)
+        if offers_assessed_stage and not has_ideb and not has_rate:
+            parts.append(self.absence(PHRASE_NO_INDICATOR, "L-09", "ideb"))
 
         # 1. identificação
-        partes.append('<section class="bloco" id="identificacao">')
-        partes.append(self._cabecalho_bloco("Identificação"))
-        partes.append(
+        parts.append('<section class="bloco" id="identificacao">')
+        parts.append(self._section_heading("Identificação"))
+        parts.append(
             "<dl class=\"ficha\">"
             f"<dt>Escola</dt><dd>{html.escape(e['nome'])}</dd>"
             f"<dt>Região Administrativa</dt><dd>{html.escape(e['ra'])}</dd>"
             f"<dt>Rede</dt><dd>{html.escape(e['rede'])}</dd>"
-            f"<dt>Código INEP</dt><dd>{html.escape(co)}</dd>"
+            f"<dt>Código INEP</dt><dd>{html.escape(code)}</dd>"
             "</dl>"
             f'<p class="fonte">Rede no cadastro: {html.escape(e["rede_cadastro"])}.</p>'
-            f'{self.fonte("identificacao")}'
+            f'{self.source_note("identificacao")}'
             "</section>"
         )
 
         # 2. oferta
-        partes.append('<section class="bloco" id="oferta">')
-        partes.append(self._cabecalho_bloco("Oferta por etapa"))
-        partes.append('<table class="tabela"><thead><tr><th>Etapa</th><th>Oferta em 2025</th></tr></thead><tbody>')
-        for coluna, rotulo in OFERTAS:
-            valor = "oferta" if e[coluna] == 1 else "não oferta"
-            partes.append(f"<tr><td>{html.escape(rotulo)}</td><td>{valor}</td></tr>")
-        partes.append("</tbody></table>")
-        partes.append(self.fonte("oferta"))
-        partes.append("</section>")
+        parts.append('<section class="bloco" id="oferta">')
+        parts.append(self._section_heading("Oferta por etapa"))
+        parts.append('<table class="tabela"><thead><tr><th>Etapa</th><th>Oferta em 2025</th></tr></thead><tbody>')
+        for column, item_label in OFFERINGS:
+            value = "oferta" if e[column] == 1 else "não oferta"
+            parts.append(f"<tr><td>{html.escape(item_label)}</td><td>{value}</td></tr>")
+        parts.append("</tbody></table>")
+        parts.append(self.source_note("oferta"))
+        parts.append("</section>")
 
         # 3. matrícula
-        partes.append('<section class="bloco" id="matricula">')
-        partes.append(self._cabecalho_bloco("Matrícula por etapa"))
-        partes.append(
+        parts.append('<section class="bloco" id="matricula">')
+        parts.append(self._section_heading("Matrícula por etapa"))
+        parts.append(
             '<table class="tabela"><thead><tr><th>Etapa</th><th>2024</th><th>2025</th></tr></thead><tbody>'
         )
-        for etapa, rotulo in (("CRE", "Creche"), ("AI", "Anos iniciais"), ("AF", "Anos finais"), ("EM", "Ensino médio")):
-            partes.append(
-                f"<tr><td>{rotulo}</td><td>{self.mat_span(etapa, '2024')}</td>"
-                f"<td>{self.mat_span(etapa, '2025')}</td></tr>"
+        for stage, item_label in (("CRE", "Creche"), ("AI", "Anos iniciais"), ("AF", "Anos finais"), ("EM", "Ensino médio")):
+            parts.append(
+                f"<tr><td>{item_label}</td><td>{self.enrollment_span(stage, '2024')}</td>"
+                f"<td>{self.enrollment_span(stage, '2025')}</td></tr>"
             )
-        partes.append("</tbody></table>")
-        partes.append(self.mat_ausencias("matricula", ("2024", "2025"), ["CRE", "AI", "AF", "EM"]))
-        partes.append(self.fonte("matricula"))
-        partes.append("</section>")
+        parts.append("</tbody></table>")
+        parts.append(self.enrollment_absences("matricula", ("2024", "2025"), ["CRE", "AI", "AF", "EM"]))
+        parts.append(self.source_note("matricula"))
+        parts.append("</section>")
 
         # 4. Ideb
-        partes.append('<section class="bloco" id="ideb">')
-        partes.append(self._cabecalho_bloco("Ideb por etapa"))
-        for etapa, rotulo, oferta in ETAPAS:
-            if not e[oferta]:
-                corpo = (
-                    f"<h3>{titulo_etapa(rotulo)}</h3>"
-                    + self.ausencia(FRASE_ETAPA, "L-59", "estados", estado="nao_aplicavel")
+        parts.append('<section class="bloco" id="ideb">')
+        parts.append(self._section_heading("Ideb por etapa"))
+        for stage, item_label, offering in STAGES:
+            if not e[offering]:
+                body = (
+                    f"<h3>{stage_title(item_label)}</h3>"
+                    + self.absence(PHRASE_STAGE_NOT_OFFERED, "L-59", "estados", state="nao_aplicavel")
                 )
-                partes.append(self._artigo("ideb", etapa, None, "nao_ofertada", corpo))
+                parts.append(self._stage_article("ideb", stage, None, "nao_ofertada", body))
                 continue
-            n = e.get(f"mat_{etapa}_2025")
-            ano_2025 = indicador(self.d, co, etapa, "ideb_observado")
-            situacao = "publicado" if ano_2025["estado"] == "valor" else "ausente"
-            corpo = [f"<h3>{titulo_etapa(rotulo)}</h3>"]
+            n = e.get(f"mat_{stage}_2025")
+            year_2025 = get_indicator(self.d, code, stage, "ideb_observado")
+            status = "publicado" if year_2025["estado"] == "valor" else "ausente"
+            body = [f"<h3>{stage_title(item_label)}</h3>"]
             if n is None:
-                corpo.append(
-                    f'<p class="n">n = {self.mat_span(etapa, "2025")} '
+                body.append(
+                    f'<p class="n">n = {self.enrollment_span(stage, "2025")} '
                     "em 2025 (matrícula da etapa)</p>"
                 )
             else:
-                corpo.append(
-                    f'<p class="n">n = {self.mat_span(etapa, "2025")} '
-                    f'{palavra_aluno(n)} em 2025 (matrícula da etapa)</p>'
+                body.append(
+                    f'<p class="n">n = {self.enrollment_span(stage, "2025")} '
+                    f'{student_word(n)} em 2025 (matrícula da etapa)</p>'
                 )
-            corpo.append('<table class="tabela tabela-estreita"><thead><tr><th>Ano</th><th>Ideb</th></tr></thead><tbody>')
-            for ano in ANOS_IDEB_ETAPA[etapa]:
-                corpo.append(f"<tr><td>{ano}</td><td>{self.ideb_cell(etapa, ano, n)}</td></tr>")
-            corpo.append("</tbody></table>")
-            if ano_2025["estado"] != "valor":
+            body.append('<table class="tabela tabela-estreita"><thead><tr><th>Ano</th><th>Ideb</th></tr></thead><tbody>')
+            for year in IDEB_YEARS_BY_STAGE[stage]:
+                body.append(f"<tr><td>{year}</td><td>{self.ideb_cell(stage, year, n)}</td></tr>")
+            body.append("</tbody></table>")
+            if year_2025["estado"] != "valor":
                 if e["rede"].startswith("privada"):
-                    corpo.append(self.ausencia(FRASE_IDEB_PRIVADA, "L-08", "ideb-privada"))
+                    body.append(self.absence(PHRASE_IDEB_PRIVATE, "L-08", "ideb-privada"))
                 else:
-                    corpo.append(self.ausencia(FRASE_IDEB_PUBLICA, "L-09, L-30", "ideb"))
-            partes.append(self._artigo("ideb", etapa, n, situacao, "".join(corpo)))
-        partes.append(self.fonte("ideb"))
-        partes.append("</section>")
+                    body.append(self.absence(PHRASE_IDEB_PUBLIC, "L-09, L-30", "ideb"))
+            parts.append(self._stage_article("ideb", stage, n, status, "".join(body)))
+        parts.append(self.source_note("ideb"))
+        parts.append("</section>")
 
         # 5. fluxo
-        partes.append('<section class="bloco" id="fluxo">')
-        partes.append(self._cabecalho_bloco("Fluxo escolar"))
-        for etapa, rotulo, oferta in ETAPAS:
-            if not e[oferta]:
-                corpo = f"<h3>{titulo_etapa(rotulo)}</h3>" + self.ausencia(
-                    FRASE_ETAPA, "L-59", "estados", estado="nao_aplicavel"
+        parts.append('<section class="bloco" id="fluxo">')
+        parts.append(self._section_heading("Fluxo escolar"))
+        for stage, item_label, offering in STAGES:
+            if not e[offering]:
+                body = f"<h3>{stage_title(item_label)}</h3>" + self.absence(
+                    PHRASE_STAGE_NOT_OFFERED, "L-59", "estados", state="nao_aplicavel"
                 )
-                partes.append(self._artigo("fluxo", etapa, None, "nao_ofertada", corpo))
+                parts.append(self._stage_article("fluxo", stage, None, "nao_ofertada", body))
                 continue
-            n = e.get(f"mat_{etapa}_2025")
+            n = e.get(f"mat_{stage}_2025")
             if n is None:
-                corpo = (
-                    f"<h3>{titulo_etapa(rotulo)}</h3>"
-                    f'<p class="n">n = {self.mat_span(etapa, "2025")} em 2025</p>'
-                    + self.ausencia(FRASE_MATRICULA_2025, "L-28", "censo")
+                body = (
+                    f"<h3>{stage_title(item_label)}</h3>"
+                    f'<p class="n">n = {self.enrollment_span(stage, "2025")} em 2025</p>'
+                    + self.absence(PHRASE_ENROLLMENT_2025, "L-28", "censo")
                 )
-                partes.append(self._artigo("fluxo", etapa, None, "ausente", corpo))
+                parts.append(self._stage_article("fluxo", stage, None, "ausente", body))
                 continue
-            if n < self.limiar:
-                corpo = f"<h3>{titulo_etapa(rotulo)}</h3>" + self.pequena(etapa, n)
-                partes.append(self._artigo("fluxo", etapa, n, "suprimido", corpo))
+            if n < self.threshold:
+                body = f"<h3>{stage_title(item_label)}</h3>" + self.small_n(stage, n)
+                parts.append(self._stage_article("fluxo", stage, n, "suprimido", body))
                 continue
-            linhas = []
-            tem_valor = False
-            for nome, label in (("aprovacao", "Aprovação"), ("reprovacao", "Reprovação"), ("abandono", "Abandono")):
-                reg = indicador(self.d, co, etapa, nome)
-                if reg["estado"] in ("valor", "zero"):
-                    tem_valor = True
-                linhas.append(
-                    f"<tr><td>{label}</td><td>{self.rate_span('fluxo', nome, etapa, n, reg)}</td></tr>"
+            rows = []
+            has_value = False
+            for name, label in (("aprovacao", "Aprovação"), ("reprovacao", "Reprovação"), ("abandono", "Abandono")):
+                entry = get_indicator(self.d, code, stage, name)
+                if entry["estado"] in ("valor", "zero"):
+                    has_value = True
+                rows.append(
+                    f"<tr><td>{label}</td><td>{self.rate_span('fluxo', name, stage, n, entry)}</td></tr>"
                 )
-            corpo = f"<h3>{titulo_etapa(rotulo)}</h3>"
-            corpo += f'<p class="n">n = {self.mat_span(etapa, "2025")} {palavra_aluno(n)} em 2025</p>'
-            corpo += '<table class="tabela"><thead><tr><th>Indicador</th><th>2025</th></tr></thead><tbody>'
-            corpo += "".join(linhas) + "</tbody></table>"
-            partes.append(self._artigo("fluxo", etapa, n, "publicado" if tem_valor else "ausente", corpo))
-        partes.append(self.fonte("fluxo"))
-        partes.append("</section>")
+            body = f"<h3>{stage_title(item_label)}</h3>"
+            body += f'<p class="n">n = {self.enrollment_span(stage, "2025")} {student_word(n)} em 2025</p>'
+            body += '<table class="tabela"><thead><tr><th>Indicador</th><th>2025</th></tr></thead><tbody>'
+            body += "".join(rows) + "</tbody></table>"
+            parts.append(self._stage_article("fluxo", stage, n, "publicado" if has_value else "ausente", body))
+        parts.append(self.source_note("fluxo"))
+        parts.append("</section>")
 
         # 6. distorção idade-série
-        partes.append('<section class="bloco" id="tdi">')
-        partes.append(self._cabecalho_bloco("Distorção idade-série"))
-        for etapa, rotulo, oferta in ETAPAS:
-            if not e[oferta]:
-                corpo = f"<h3>{titulo_etapa(rotulo)}</h3>" + self.ausencia(
-                    FRASE_ETAPA, "L-59", "estados", estado="nao_aplicavel"
+        parts.append('<section class="bloco" id="tdi">')
+        parts.append(self._section_heading("Distorção idade-série"))
+        for stage, item_label, offering in STAGES:
+            if not e[offering]:
+                body = f"<h3>{stage_title(item_label)}</h3>" + self.absence(
+                    PHRASE_STAGE_NOT_OFFERED, "L-59", "estados", state="nao_aplicavel"
                 )
-                partes.append(self._artigo("tdi", etapa, None, "nao_ofertada", corpo))
+                parts.append(self._stage_article("tdi", stage, None, "nao_ofertada", body))
                 continue
-            n = e.get(f"mat_{etapa}_2025")
+            n = e.get(f"mat_{stage}_2025")
             if n is None:
-                corpo = (
-                    f"<h3>{titulo_etapa(rotulo)}</h3>"
-                    f'<p class="n">n = {self.mat_span(etapa, "2025")} em 2025</p>'
-                    + self.ausencia(FRASE_MATRICULA_2025, "L-28", "censo")
+                body = (
+                    f"<h3>{stage_title(item_label)}</h3>"
+                    f'<p class="n">n = {self.enrollment_span(stage, "2025")} em 2025</p>'
+                    + self.absence(PHRASE_ENROLLMENT_2025, "L-28", "censo")
                 )
-                partes.append(self._artigo("tdi", etapa, None, "ausente", corpo))
+                parts.append(self._stage_article("tdi", stage, None, "ausente", body))
                 continue
-            if n < self.limiar:
-                corpo = f"<h3>{titulo_etapa(rotulo)}</h3>" + self.pequena(etapa, n)
-                partes.append(self._artigo("tdi", etapa, n, "suprimido", corpo))
+            if n < self.threshold:
+                body = f"<h3>{stage_title(item_label)}</h3>" + self.small_n(stage, n)
+                parts.append(self._stage_article("tdi", stage, n, "suprimido", body))
                 continue
-            reg = indicador(self.d, co, etapa, "tdi")
-            corpo = (
-                f"<h3>{titulo_etapa(rotulo)}</h3>"
-                f'<p class="n">n = {self.mat_span(etapa, "2025")} {palavra_aluno(n)} em 2025</p>'
+            entry = get_indicator(self.d, code, stage, "tdi")
+            body = (
+                f"<h3>{stage_title(item_label)}</h3>"
+                f'<p class="n">n = {self.enrollment_span(stage, "2025")} {student_word(n)} em 2025</p>'
                 '<table class="tabela"><thead><tr><th>Indicador</th><th>2025</th></tr></thead><tbody>'
-                f"<tr><td>Distorção idade-série</td><td>{self.rate_span('tdi', 'tdi', etapa, n, reg)}</td></tr>"
+                f"<tr><td>Distorção idade-série</td><td>{self.rate_span('tdi', 'tdi', stage, n, entry)}</td></tr>"
                 "</tbody></table>"
             )
-            partes.append(self._artigo("tdi", etapa, n, "publicado" if reg["estado"] in ("valor", "zero") else "ausente", corpo))
-        partes.append(self.fonte("tdi"))
-        partes.append("</section>")
+            parts.append(self._stage_article("tdi", stage, n, "publicado" if entry["estado"] in ("valor", "zero") else "ausente", body))
+        parts.append(self.source_note("tdi"))
+        parts.append("</section>")
 
         # 7. não-resposta
-        partes.append('<section class="bloco" id="tnr">')
-        partes.append(self._cabecalho_bloco("Taxa de não-resposta"))
-        for etapa, rotulo, oferta in ETAPAS:
-            if not e[oferta]:
-                corpo = f"<h3>{titulo_etapa(rotulo)}</h3>" + self.ausencia(
-                    FRASE_ETAPA, "L-59", "estados", estado="nao_aplicavel"
+        parts.append('<section class="bloco" id="tnr">')
+        parts.append(self._section_heading("Taxa de não-resposta"))
+        for stage, item_label, offering in STAGES:
+            if not e[offering]:
+                body = f"<h3>{stage_title(item_label)}</h3>" + self.absence(
+                    PHRASE_STAGE_NOT_OFFERED, "L-59", "estados", state="nao_aplicavel"
                 )
-                partes.append(self._artigo("tnr", etapa, None, "nao_ofertada", corpo))
+                parts.append(self._stage_article("tnr", stage, None, "nao_ofertada", body))
                 continue
-            n = e.get(f"mat_{etapa}_2025")
+            n = e.get(f"mat_{stage}_2025")
             if n is None:
-                corpo = (
-                    f"<h3>{titulo_etapa(rotulo)}</h3>"
-                    f'<p class="n">n = {self.mat_span(etapa, "2025")} em 2025</p>'
-                    + self.ausencia(FRASE_MATRICULA_2025, "L-28", "censo")
+                body = (
+                    f"<h3>{stage_title(item_label)}</h3>"
+                    f'<p class="n">n = {self.enrollment_span(stage, "2025")} em 2025</p>'
+                    + self.absence(PHRASE_ENROLLMENT_2025, "L-28", "censo")
                 )
-                partes.append(self._artigo("tnr", etapa, None, "ausente", corpo))
+                parts.append(self._stage_article("tnr", stage, None, "ausente", body))
                 continue
-            if n < self.limiar:
-                corpo = f"<h3>{titulo_etapa(rotulo)}</h3>" + self.pequena(etapa, n)
-                partes.append(self._artigo("tnr", etapa, n, "suprimido", corpo))
+            if n < self.threshold:
+                body = f"<h3>{stage_title(item_label)}</h3>" + self.small_n(stage, n)
+                parts.append(self._stage_article("tnr", stage, n, "suprimido", body))
                 continue
-            reg = indicador(self.d, co, etapa, "tnr")
-            corpo = (
-                f"<h3>{titulo_etapa(rotulo)}</h3>"
-                f'<p class="n">n = {self.mat_span(etapa, "2025")} {palavra_aluno(n)} em 2025</p>'
+            entry = get_indicator(self.d, code, stage, "tnr")
+            body = (
+                f"<h3>{stage_title(item_label)}</h3>"
+                f'<p class="n">n = {self.enrollment_span(stage, "2025")} {student_word(n)} em 2025</p>'
                 '<table class="tabela"><thead><tr><th>Indicador</th><th>2025</th></tr></thead><tbody>'
-                f"<tr><td>Taxa de não-resposta</td><td>{self.rate_span('tnr', 'tnr', etapa, n, reg)}</td></tr>"
+                f"<tr><td>Taxa de não-resposta</td><td>{self.rate_span('tnr', 'tnr', stage, n, entry)}</td></tr>"
                 "</tbody></table>"
             )
-            partes.append(self._artigo("tnr", etapa, n, "publicado" if reg["estado"] in ("valor", "zero") else "ausente", corpo))
-        partes.append(
+            parts.append(self._stage_article("tnr", stage, n, "publicado" if entry["estado"] in ("valor", "zero") else "ausente", body))
+        parts.append(
             '<p class="nota">A taxa de não-resposta mede falta de informação de rendimento '
             'e movimento, não participação no Saeb. <a href="como-ler.html#tnr">Como ler</a>.</p>'
         )
-        partes.append(self.fonte("tnr"))
-        partes.append("</section>")
+        parts.append(self.source_note("tnr"))
+        parts.append("</section>")
 
         # 8. infraestrutura
-        partes.append('<section class="bloco" id="infraestrutura">')
-        partes.append(self._cabecalho_bloco("Infraestrutura"))
-        universo_infra = e["oferta_fund_ai"] == 1 or e["oferta_fund_af"] == 1 or e["oferta_med"] == 1
-        if not universo_infra:
-            partes.append(
-                self.ausencia(
-                    FRASE_INFRA_NAO_APLICAVEL, "L-25", "infraestrutura", estado="nao_aplicavel"
+        parts.append('<section class="bloco" id="infraestrutura">')
+        parts.append(self._section_heading("Infraestrutura"))
+        infra_universe = e["oferta_fund_ai"] == 1 or e["oferta_fund_af"] == 1 or e["oferta_med"] == 1
+        if not infra_universe:
+            parts.append(
+                self.absence(
+                    PHRASE_INFRA_NOT_APPLICABLE, "L-25", "infraestrutura", state="nao_aplicavel"
                 )
             )
         else:
-            partes.append('<table class="tabela"><thead><tr><th>Item</th><th>Declarado em 2025</th></tr></thead><tbody>')
-            for item, rotulo in INFRA_ITENS:
-                reg = self.d["infra"].get((co, item), {"valor": None, "estado": "ausente"})
-                if reg["estado"] == "valor" and reg["valor"] is not None:
-                    texto = "tem" if reg["valor"] == 1 else "não tem"
-                    celula = self._add(
-                        id=f"infra-{item.lower()}", familia="infraestrutura", bloco="infraestrutura",
-                        etapa="", ano="2025", valor=int(reg["valor"]), estado="valor", n=1, texto=texto,
+            parts.append('<table class="tabela"><thead><tr><th>Item</th><th>Declarado em 2025</th></tr></thead><tbody>')
+            for item, item_label in INFRA_ITEMS:
+                entry = self.d["infra"].get((code, item), {"valor": None, "estado": "ausente"})
+                if entry["estado"] == "valor" and entry["valor"] is not None:
+                    text = "tem" if entry["valor"] == 1 else "não tem"
+                    cell = self._add(
+                        id=f"infra-{item.lower()}", family="infraestrutura", block="infraestrutura",
+                        stage="", year="2025", value=int(entry["valor"]), state="valor", n=1, text=text,
                     )
                 else:
-                    celula = self._add(
-                        id=f"infra-{item.lower()}", familia="infraestrutura", bloco="infraestrutura",
-                        etapa="", ano="2025", valor=None, estado="ausente", n=1, texto="-",
+                    cell = self._add(
+                        id=f"infra-{item.lower()}", family="infraestrutura", block="infraestrutura",
+                        stage="", year="2025", value=None, state="ausente", n=1, text="-",
                     )
-                partes.append(f"<tr><td>{html.escape(rotulo)}</td><td>{celula}</td></tr>")
-            partes.append("</tbody></table>")
-            partes.append('<p class="nota">O item é o que a escola declarou ao Censo Escolar de 2025.</p>')
-        partes.append(self.fonte("infraestrutura"))
-        partes.append("</section>")
+                parts.append(f"<tr><td>{html.escape(item_label)}</td><td>{cell}</td></tr>")
+            parts.append("</tbody></table>")
+            parts.append('<p class="nota">O item é o que a escola declarou ao Censo Escolar de 2025.</p>')
+        parts.append(self.source_note("infraestrutura"))
+        parts.append("</section>")
 
         # 9. creche (só quando a escola oferta creche)
         if e["oferta_inf_cre"] == 1:
-            partes.append('<section class="bloco" id="creche">')
-            partes.append(self._cabecalho_bloco("Creche da escola"))
-            partes.append('<table class="tabela tabela-estreita"><thead><tr><th>Ano</th><th>Matrícula em creche</th></tr></thead><tbody>')
-            for ano in ("2024", "2025"):
-                partes.append(
-                    f"<tr><td>{ano}</td><td>{self.mat_span('CRE', ano, 'creche')}</td></tr>"
+            parts.append('<section class="bloco" id="creche">')
+            parts.append(self._section_heading("Creche da escola"))
+            parts.append('<table class="tabela tabela-estreita"><thead><tr><th>Ano</th><th>Matrícula em creche</th></tr></thead><tbody>')
+            for year in ("2024", "2025"):
+                parts.append(
+                    f"<tr><td>{year}</td><td>{self.enrollment_span('CRE', year, 'creche')}</td></tr>"
                 )
-            partes.append("</tbody></table>")
-            partes.append(self.mat_ausencias("creche", ("2024", "2025"), ["CRE"]))
-            partes.append(self.fonte("creche"))
-            partes.append("</section>")
+            parts.append("</tbody></table>")
+            parts.append(self.enrollment_absences("creche", ("2024", "2025"), ["CRE"]))
+            parts.append(self.source_note("creche"))
+            parts.append("</section>")
 
-        partes.append(
+        parts.append(
             f'<p class="rodape-pagina">Procedência de cada número: '
-            f'<a href="dados/{co}.json">dados/{co}.json</a>. '
+            f'<a href="dados/{code}.json">dados/{code}.json</a>. '
             '<a href="como-ler.html">Como ler os números</a> · '
             '<a href="creditos.html">Créditos e licenças</a>.</p>'
         )
-        partes.append("</main>")
-        return "".join(partes)
+        parts.append("</main>")
+        return "".join(parts)
 
 
 # --------------------------------------------------------------------------
@@ -994,21 +994,21 @@ footer.rodape a { color: var(--destaque); }
 """
 
 
-def documento(titulo: str, corpo: str, data_build: str, limiar: int) -> str:
+def document(title: str, body: str, data_build: str, threshold: int) -> str:
     return f"""<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(titulo)}</title>
+<title>{html.escape(title)}</title>
 <link rel="stylesheet" href="estilo.css">
 </head>
 <body>
 <header class="topo">
   <a class="marca" href="index.html">Prova dos Nove</a>
-  <p class="carimbo">build {html.escape(data_build)} · limiar de n pequeno = {limiar}</p>
+  <p class="carimbo">build {html.escape(data_build)} · limiar de n pequeno = {threshold}</p>
 </header>
-{corpo}
+{body}
 <footer class="rodape">
   <p>Prova dos Nove · dados públicos de educação, com fonte, ano e cálculo.
   <a href="como-ler.html">Como ler os números</a> ·
@@ -1019,15 +1019,15 @@ def documento(titulo: str, corpo: str, data_build: str, limiar: int) -> str:
 """
 
 
-def pagina_index(dados: dict, data_build: str, limiar: int) -> str:
-    escolas = dados["escolas"]
-    por_ra: dict[str, list[dict]] = {}
-    for escola in escolas:
-        por_ra.setdefault(escola["ra"], []).append(escola)
-    for lista in por_ra.values():
-        lista.sort(key=lambda e: (e["nome"], e["co"]))
+def render_index_page(data: dict, data_build: str, threshold: int) -> str:
+    schools = data["escolas"]
+    by_region: dict[str, list[dict]] = {}
+    for school in schools:
+        by_region.setdefault(school["ra"], []).append(school)
+    for entries in by_region.values():
+        entries.sort(key=lambda e: (e["nome"], e["co"]))
 
-    partes = [
+    parts = [
         "<main>",
         "<h1>Escolha uma escola</h1>",
         '<p class="subtitulo">Distrito Federal · uma página por escola, em português comum.</p>',
@@ -1040,18 +1040,18 @@ def pagina_index(dados: dict, data_build: str, limiar: int) -> str:
         "A lista por Região Administrativa abaixo continua completa.</p></noscript>",
         '<div id="lista">',
     ]
-    for ra in sorted(por_ra):
-        partes.append(f'<section class="ra" data-ra="{html.escape(ra)}">')
-        partes.append(f"<h2>{html.escape(ra)}</h2><ul>")
-        for escola in por_ra[ra]:
-            partes.append(
-                f'<li data-codigo="{escola["co"]}" data-nome="{html.escape(escola["nome"])}">'
-                f'<a href="{escola["co"]}.html">{html.escape(escola["nome"])}</a>'
-                f'<span class="rede">{html.escape(escola["rede"])}</span></li>'
+    for region in sorted(by_region):
+        parts.append(f'<section class="ra" data-ra="{html.escape(region)}">')
+        parts.append(f"<h2>{html.escape(region)}</h2><ul>")
+        for school in by_region[region]:
+            parts.append(
+                f'<li data-codigo="{school["co"]}" data-nome="{html.escape(school["nome"])}">'
+                f'<a href="{school["co"]}.html">{html.escape(school["nome"])}</a>'
+                f'<span class="rede">{html.escape(school["rede"])}</span></li>'
             )
-        partes.append("</ul></section>")
-    partes.append("</div></main>")
-    corpo = "".join(partes)
+        parts.append("</ul></section>")
+    parts.append("</div></main>")
+    body = "".join(parts)
 
     js = r"""
 <script>
@@ -1094,11 +1094,11 @@ def pagina_index(dados: dict, data_build: str, limiar: int) -> str:
 })();
 </script>
 """
-    return documento("Prova dos Nove — escolas do Distrito Federal", corpo + js, data_build, limiar)
+    return document("Prova dos Nove — escolas do Distrito Federal", body + js, data_build, threshold)
 
 
-def pagina_como_ler(data_build: str, limiar: int) -> str:
-    corpo = f"""
+def render_how_to_read_page(data_build: str, threshold: int) -> str:
+    body = f"""
 <main>
 <h1>Como ler os números</h1>
 <p class="subtitulo">Os quatro estados, as ausências e o limiar de turma pequena, explicados uma vez.</p>
@@ -1147,10 +1147,10 @@ explica, sozinha, a ausência de Ideb (L-09).</p>
 </section>
 
 <section class="bloco" id="n">
-<h2>Turma pequena: o limiar de n = {limiar}</h2>
+<h2>Turma pequena: o limiar de n = {threshold}</h2>
 <p>Nos indicadores de razão — distorção idade-série, taxa de não-resposta,
 aprovação, reprovação e abandono — a página não publica a taxa quando a etapa
-tem menos de {limiar} alunos. Nesse tamanho, um valor extremo (0,0% de distorção
+tem menos de {threshold} alunos. Nesse tamanho, um valor extremo (0,0% de distorção
 ou 100% de aprovação) é mais provável do que o desempenho, e a taxa engana mais
 do que informa. A página mostra a matrícula e diz que a amostra é pequena
 (D4, L-40).</p>
@@ -1200,33 +1200,33 @@ status, está em
 </section>
 </main>
 """
-    return documento("Como ler os números — Prova dos Nove", corpo, data_build, limiar)
+    return document("Como ler os números — Prova dos Nove", body, data_build, threshold)
 
 
-def pagina_creditos(dados: dict, data_build: str, limiar: int) -> str:
-    por_fonte: dict[str, tuple[str, str | None]] = {}
-    for registro in dados["registros"].values():
-        fonte = registro["fonte"]
-        chave = (registro["licenca"], registro.get("licenca_url"))
-        anterior = por_fonte.setdefault(fonte, chave)
-        if anterior != chave:
+def render_credits_page(data: dict, data_build: str, threshold: int) -> str:
+    by_source: dict[str, tuple[str, str | None]] = {}
+    for record in data["registros"].values():
+        source = record["fonte"]
+        key = (record["licenca"], record.get("licenca_url"))
+        previous = by_source.setdefault(source, key)
+        if previous != key:
             raise BuildError(
-                f"famílias da fonte {fonte!r} divergem em licença: {anterior!r} × {chave!r}"
+                f"famílias da fonte {source!r} divergem em licença: {previous!r} × {key!r}"
             )
 
-    linhas = []
-    for fonte in sorted(por_fonte):
-        licenca, url = por_fonte[fonte]
+    rows = []
+    for source in sorted(by_source):
+        license_name, url = by_source[source]
         if url:
-            declaracao = f'<a href="{html.escape(url, quote=True)}">{html.escape(url)}</a>'
+            declaration = f'<a href="{html.escape(url, quote=True)}">{html.escape(url)}</a>'
         else:
-            declaracao = "—"
-        linhas.append(
-            f"<tr><td>{html.escape(fonte)}</td><td>{html.escape(licenca)}</td>"
-            f"<td>{declaracao}</td></tr>"
+            declaration = "—"
+        rows.append(
+            f"<tr><td>{html.escape(source)}</td><td>{html.escape(license_name)}</td>"
+            f"<td>{declaration}</td></tr>"
         )
-    linhas = "".join(linhas)
-    corpo = f"""
+    rows = "".join(rows)
+    body = f"""
 <main>
 <h1>Créditos e licenças</h1>
 <p class="subtitulo">Titular, licenças e as fontes usadas em cada número.</p>
@@ -1245,7 +1245,7 @@ licença MIT está no arquivo
 <p>Licença como declarada no catálogo de cada fonte; nenhuma foi inferida.</p>
 <table class="tabela">
 <thead><tr><th>Fonte</th><th>Licença declarada</th><th>Declaração</th></tr></thead>
-<tbody>{linhas}</tbody>
+<tbody>{rows}</tbody>
 </table>
 <p>A série de matrículas por modalidade da SEEDF não é usada em nenhum número
 desta versão. A matrícula publicada vem do Censo da INEP (L-62).</p>
@@ -1254,68 +1254,68 @@ desta versão. A matrícula publicada vem do Censo da INEP (L-62).</p>
 <section class="bloco" id="build">
 <h2>Este build</h2>
 <p>Data do build: <strong>{html.escape(data_build)}</strong>.</p>
-<p>Limiar de n pequeno usado neste build: <strong>{limiar}</strong>.</p>
+<p>Limiar de n pequeno usado neste build: <strong>{threshold}</strong>.</p>
 <p><a href="como-ler.html">Como ler os números</a> · <a href="index.html">Todas as escolas</a>.</p>
 </section>
 </main>
 """
-    return documento("Créditos e licenças — Prova dos Nove", corpo, data_build, limiar)
+    return document("Créditos e licenças — Prova dos Nove", body, data_build, threshold)
 
 
 # --------------------------------------------------------------------------
 # Build
 
 
-def _limpar_saida(site: Path) -> None:
-    for nome in ("index.html", "creditos.html", "como-ler.html", "estilo.css", "indice.json"):
-        alvo = site / nome
-        if alvo.is_file():
-            alvo.unlink()
-    for alvo in site.glob("[0-9]" * 8 + ".html"):
-        alvo.unlink()
-    dados_dir = site / "dados"
-    if dados_dir.is_dir():
-        for alvo in dados_dir.glob("*.json"):
-            alvo.unlink()
+def _clean_output(site: Path) -> None:
+    for name in ("index.html", "creditos.html", "como-ler.html", "estilo.css", "indice.json"):
+        target = site / name
+        if target.is_file():
+            target.unlink()
+    for target in site.glob("[0-9]" * 8 + ".html"):
+        target.unlink()
+    data_dir = site / "dados"
+    if data_dir.is_dir():
+        for target in data_dir.glob("*.json"):
+            target.unlink()
 
 
-def _tamanho(site: Path) -> int:
+def _total_size(site: Path) -> int:
     return sum(p.stat().st_size for p in site.rglob("*") if p.is_file())
 
 
-def construir_site(public: Path, out: Path, data_build: str, limiar: int, quiet: bool = False) -> dict:
+def build_site(public: Path, out: Path, data_build: str, threshold: int, quiet: bool = False) -> dict:
     """Gera o site inteiro; devolve contagens e tamanho."""
-    dados = carregar_dados(public)
+    data = load_data(public)
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     (out / "dados").mkdir(parents=True, exist_ok=True)
-    _limpar_saida(out)
+    _clean_output(out)
 
     (out / "estilo.css").write_text(CSS, encoding="utf-8")
 
-    indice = [
+    index_entries = [
         {"co_entidade": e["co"], "nome": e["nome"], "ra": e["ra"], "rede": e["rede"]}
-        for e in dados["escolas"]
+        for e in data["escolas"]
     ]
-    indice.sort(key=lambda x: (x["nome"], x["co_entidade"]))
+    index_entries.sort(key=lambda x: (x["nome"], x["co_entidade"]))
     (out / "indice.json").write_text(
-        json.dumps(indice, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        json.dumps(index_entries, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
     )
 
-    (out / "index.html").write_text(pagina_index(dados, data_build, limiar), encoding="utf-8")
-    (out / "como-ler.html").write_text(pagina_como_ler(data_build, limiar), encoding="utf-8")
-    (out / "creditos.html").write_text(pagina_creditos(dados, data_build, limiar), encoding="utf-8")
+    (out / "index.html").write_text(render_index_page(data, data_build, threshold), encoding="utf-8")
+    (out / "como-ler.html").write_text(render_how_to_read_page(data_build, threshold), encoding="utf-8")
+    (out / "creditos.html").write_text(render_credits_page(data, data_build, threshold), encoding="utf-8")
 
-    for escola in dados["escolas"]:
-        pagina = PaginaEscola(dados, escola, data_build, limiar)
-        corpo = pagina.render()
-        (out / f'{escola["co"]}.html').write_text(
-            documento(f'{escola["nome"]} — Prova dos Nove', corpo, data_build, limiar),
+    for school in data["escolas"]:
+        page = SchoolPage(data, school, data_build, threshold)
+        body = page.render()
+        (out / f'{school["co"]}.html').write_text(
+            document(f'{school["nome"]} — Prova dos Nove', body, data_build, threshold),
             encoding="utf-8",
         )
-        (out / "dados" / f'{escola["co"]}.json').write_text(
+        (out / "dados" / f'{school["co"]}.json').write_text(
             json.dumps(
-                {"escola": escola["co"], "gerado_em": data_build, "numeros": pagina.numeros},
+                {"escola": school["co"], "gerado_em": data_build, "numeros": page.numbers},
                 ensure_ascii=False,
                 sort_keys=True,
                 indent=2,
@@ -1324,365 +1324,365 @@ def construir_site(public: Path, out: Path, data_build: str, limiar: int, quiet:
             encoding="utf-8",
         )
 
-    total = _tamanho(out)
-    if total > TAMANHO_MAXIMO_SITE:
+    total = _total_size(out)
+    if total > MAX_SITE_BYTES:
         raise BuildError(
             f"site com {total / (1024 * 1024):.1f} MB passa do limite de "
-            f"{TAMANHO_MAXIMO_SITE / (1024 * 1024):.0f} MB"
+            f"{MAX_SITE_BYTES / (1024 * 1024):.0f} MB"
         )
     if not quiet:
         print(
-            f"site: {len(dados['escolas']):,} páginas de escola, "
+            f"site: {len(data['escolas']):,} páginas de escola, "
             f"{total / (1024 * 1024):.1f} MB em {out}"
         )
-    return {"escolas": len(dados["escolas"]), "bytes": total, "dados": dados}
+    return {"escolas": len(data["escolas"]), "bytes": total, "dados": data}
 
 
 # --------------------------------------------------------------------------
 # Verificações do §8
 
 
-def _html(site: Path, co: str) -> str:
-    return (site / f"{co}.html").read_text(encoding="utf-8")
+def read_page(site: Path, code: str) -> str:
+    return (site / f"{code}.html").read_text(encoding="utf-8")
 
 
-def _json_escola(site: Path, co: str) -> dict:
-    caminho = site / "dados" / f"{co}.json"
-    if not caminho.is_file():
-        raise BuildError(f"falta {caminho}")
-    return json.loads(caminho.read_text(encoding="utf-8"))
+def read_school_json(site: Path, code: str) -> dict:
+    path = site / "dados" / f"{code}.json"
+    if not path.is_file():
+        raise BuildError(f"falta {path}")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _ids_numeros(markup: str) -> list[str]:
+def number_ids(markup: str) -> list[str]:
     return re.findall(r'data-numero="([^"]+)"', markup)
 
 
-def check_procedencia(site: Path, dados: dict, data_build: str) -> str:
-    for escola in dados["escolas"]:
-        markup = _html(site, escola["co"])
-        registro = _json_escola(site, escola["co"])
-        if registro.get("escola") != escola["co"]:
-            raise BuildError(f"{escola['co']}: JSON de procedência com escola diferente")
-        if registro.get("gerado_em") != data_build:
-            raise BuildError(f"{escola['co']}: JSON de procedência com gerado_em diferente")
-        numeros = registro.get("numeros")
-        if not isinstance(numeros, list) or not numeros:
-            raise BuildError(f"{escola['co']}: JSON de procedência sem números")
-        por_id = {}
-        for numero in numeros:
-            identificador = numero.get("id")
-            if not identificador or identificador in por_id:
-                raise BuildError(f"{escola['co']}: número sem id ou id duplicado")
-            por_id[identificador] = numero
-        for identificador in _ids_numeros(markup):
-            if identificador not in por_id:
-                raise BuildError(f"{escola['co']}: número {identificador} sem procedência")
-            numero = por_id[identificador]
-            for campo in ("fonte", "arquivo", "ano", "calculo", "estado"):
-                if not numero.get(campo):
-                    raise BuildError(f"{escola['co']}: {identificador} sem {campo}")
-            n = numero.get("n")
+def check_provenance(site: Path, data: dict, data_build: str) -> str:
+    for school in data["escolas"]:
+        markup = read_page(site, school["co"])
+        record = read_school_json(site, school["co"])
+        if record.get("escola") != school["co"]:
+            raise BuildError(f"{school['co']}: JSON de procedência com escola diferente")
+        if record.get("gerado_em") != data_build:
+            raise BuildError(f"{school['co']}: JSON de procedência com gerado_em diferente")
+        numbers = record.get("numeros")
+        if not isinstance(numbers, list) or not numbers:
+            raise BuildError(f"{school['co']}: JSON de procedência sem números")
+        by_id = {}
+        for number in numbers:
+            identifier = number.get("id")
+            if not identifier or identifier in by_id:
+                raise BuildError(f"{school['co']}: número sem id ou id duplicado")
+            by_id[identifier] = number
+        for identifier in number_ids(markup):
+            if identifier not in by_id:
+                raise BuildError(f"{school['co']}: número {identifier} sem procedência")
+            number = by_id[identifier]
+            for field in ("fonte", "arquivo", "ano", "calculo", "estado"):
+                if not number.get(field):
+                    raise BuildError(f"{school['co']}: {identifier} sem {field}")
+            n = number.get("n")
             if not (n is None or isinstance(n, int)):
-                raise BuildError(f"{escola['co']}: {identificador} sem n inteiro ou null")
+                raise BuildError(f"{school['co']}: {identifier} sem n inteiro ou null")
             if n is None:
-                if numero.get("bloco") not in FAMILIAS_N_ALUNOS:
+                if number.get("bloco") not in STUDENT_COUNT_FAMILIES:
                     raise BuildError(
-                        f"{escola['co']}: {identificador} com n null fora de família de alunos"
+                        f"{school['co']}: {identifier} com n null fora de família de alunos"
                     )
                 # Ideb com valor e denominador ausente continua sendo valor; as
                 # taxas (fluxo, TDI, TNR) são suprimidas e ficam ausentes.
-                if numero["bloco"] == "ideb":
-                    estados_n_null = ("valor", "zero", "ausente")
+                if number["bloco"] == "ideb":
+                    states_when_n_null = ("valor", "zero", "ausente")
                 else:
-                    estados_n_null = ("ausente", "nao_aplicavel")
-                if numero["estado"] not in estados_n_null:
+                    states_when_n_null = ("ausente", "nao_aplicavel")
+                if number["estado"] not in states_when_n_null:
                     raise BuildError(
-                        f"{escola['co']}: {identificador} com n null e estado {numero['estado']}"
+                        f"{school['co']}: {identifier} com n null e estado {number['estado']}"
                     )
-                slug = SLUG_POR_ETAPA_LABEL.get(numero.get("etapa"))
+                slug = SLUG_BY_STAGE_LABEL.get(number.get("etapa"))
                 if slug is None or (
                     f'data-numero="matricula-{slug}-2025" data-estado="ausente"' not in markup
                 ):
                     raise BuildError(
-                        f"{escola['co']}: {identificador} com n null sem matrícula ausente na página"
+                        f"{school['co']}: {identifier} com n null sem matrícula ausente na página"
                     )
-            if not numero.get("limites"):
-                raise BuildError(f"{escola['co']}: {identificador} sem limites")
-            if numero["estado"] not in ESTADOS:
-                raise BuildError(f"{escola['co']}: {identificador} com estado fora do contrato")
-            if numero["estado"] in ("valor", "zero") and numero.get("valor") is None:
-                raise BuildError(f"{escola['co']}: {identificador} com estado {numero['estado']} e valor nulo")
-            if numero["estado"] in ("ausente", "nao_aplicavel") and numero.get("valor") is not None:
-                raise BuildError(f"{escola['co']}: {identificador} com estado {numero['estado']} e valor")
-            if not str(numero["arquivo"]).startswith("data/public/"):
-                raise BuildError(f"{escola['co']}: {identificador} aponta para fora de data/public")
-            exige_referencia = (
-                numero.get("bloco") in FAMILIAS_N_ALUNOS
-                and str(numero.get("ano")) != "2025"
+            if not number.get("limites"):
+                raise BuildError(f"{school['co']}: {identifier} sem limites")
+            if number["estado"] not in STATES:
+                raise BuildError(f"{school['co']}: {identifier} com estado fora do contrato")
+            if number["estado"] in ("valor", "zero") and number.get("valor") is None:
+                raise BuildError(f"{school['co']}: {identifier} com estado {number['estado']} e valor nulo")
+            if number["estado"] in ("ausente", "nao_aplicavel") and number.get("valor") is not None:
+                raise BuildError(f"{school['co']}: {identifier} com estado {number['estado']} e valor")
+            if not str(number["arquivo"]).startswith("data/public/"):
+                raise BuildError(f"{school['co']}: {identifier} aponta para fora de data/public")
+            requires_reference = (
+                number.get("bloco") in STUDENT_COUNT_FAMILIES
+                and str(number.get("ano")) != "2025"
                 and n is not None
             )
-            if exige_referencia and numero.get("n_referencia") != "2025":
+            if requires_reference and number.get("n_referencia") != "2025":
                 raise BuildError(
-                    f"{escola['co']}: {identificador} sem n_referencia = '2025' para ano != 2025"
+                    f"{school['co']}: {identifier} sem n_referencia = '2025' para ano != 2025"
                 )
-            if not exige_referencia and "n_referencia" in numero:
+            if not requires_reference and "n_referencia" in number:
                 raise BuildError(
-                    f"{escola['co']}: {identificador} com n_referencia onde não há outro ano de n"
+                    f"{school['co']}: {identifier} com n_referencia onde não há outro ano de n"
                 )
-    return f"{len(dados['escolas']):,} páginas com procedência completa"
+    return f"{len(data['escolas']):,} páginas com procedência completa"
 
 
-def check_sem_ranking(site: Path) -> str:
-    proibidos = ("p10", "p90", "mediana da rede")
-    for caminho in sorted(site.glob("*.html")):
-        texto = caminho.read_text(encoding="utf-8").lower()
-        for termo in proibidos:
-            if termo in texto:
-                raise BuildError(f"{caminho.name} publica {termo!r}")
-    indice = json.loads((site / "indice.json").read_text(encoding="utf-8"))
-    nomes = [x["nome"] for x in indice]
-    if nomes != sorted(nomes):
+def check_no_ranking(site: Path) -> str:
+    forbidden = ("p10", "p90", "mediana da rede")
+    for path in sorted(site.glob("*.html")):
+        text = path.read_text(encoding="utf-8").lower()
+        for term in forbidden:
+            if term in text:
+                raise BuildError(f"{path.name} publica {term!r}")
+    index_entries = json.loads((site / "indice.json").read_text(encoding="utf-8"))
+    names = [x["nome"] for x in index_entries]
+    if names != sorted(names):
         raise BuildError("indice.json não está em ordem alfabética por nome")
     index = (site / "index.html").read_text(encoding="utf-8")
     if 'class="num"' in index or "data-numero=" in index:
         raise BuildError("index.html publica número de escola")
     if re.search(r"\b\d[\d.]*\s+escolas?\b", index, re.IGNORECASE):
         raise BuildError("index.html publica contagem de escolas")
-    return f"{len(indice):,} entradas alfabéticas, sem número no índice"
+    return f"{len(index_entries):,} entradas alfabéticas, sem número no índice"
 
 
-def check_limiar(site: Path, dados: dict, limiar: int) -> str:
-    unidades = 0
-    com_tdi = 0
-    sem_matricula = 0
-    for escola in dados["escolas"]:
-        markup = _html(site, escola["co"])
-        for etapa, _, oferta in ETAPAS:
-            if not escola[oferta]:
+def check_threshold(site: Path, data: dict, threshold: int) -> str:
+    units = 0
+    with_tdi = 0
+    without_enrollment = 0
+    for school in data["escolas"]:
+        markup = read_page(site, school["co"])
+        for stage, _, offering in STAGES:
+            if not school[offering]:
                 continue
-            n = escola.get(f"mat_{etapa}_2025")
-            if n is not None and n >= limiar:
+            n = school.get(f"mat_{stage}_2025")
+            if n is not None and n >= threshold:
                 continue
             if n is None:
-                sem_matricula += 1
+                without_enrollment += 1
             else:
-                unidades += 1
-                if indicador(dados, escola["co"], etapa, "tdi")["estado"] in ("valor", "zero"):
-                    com_tdi += 1
-            palavra = palavra_aluno(n)
-            nota = f"{n} {palavra} {FRASE_N_PEQUENA}"
-            for bloco in ("fluxo", "tdi", "tnr"):
-                achado = re.search(
-                    rf'<article class="etapa" data-bloco="{bloco}" data-etapa="{etapa}"[^>]*>(.*?)</article>',
+                units += 1
+                if get_indicator(data, school["co"], stage, "tdi")["estado"] in ("valor", "zero"):
+                    with_tdi += 1
+            word = student_word(n)
+            note = f"{n} {word} {PHRASE_SMALL_N}"
+            for block in ("fluxo", "tdi", "tnr"):
+                found_block = re.search(
+                    rf'<article class="etapa" data-bloco="{block}" data-etapa="{stage}"[^>]*>(.*?)</article>',
                     markup,
                     re.S,
                 )
-                if not achado:
-                    raise BuildError(f"{escola['co']}/{etapa}/{bloco}: falta o cartão da etapa")
-                trecho = achado.group(1)
+                if not found_block:
+                    raise BuildError(f"{school['co']}/{stage}/{block}: falta o cartão da etapa")
+                snippet = found_block.group(1)
                 if n is None:
-                    if 'data-situacao="suprimido"' not in achado.group(0) and 'data-situacao="ausente"' not in achado.group(0):
-                        raise BuildError(f"{escola['co']}/{etapa}/{bloco}: n ausente não foi suprimido")
-                    if FRASE_MATRICULA_2025 not in re.sub(r"<[^>]+>", "", trecho):
-                        raise BuildError(f"{escola['co']}/{etapa}/{bloco}: falta a frase de 2025")
+                    if 'data-situacao="suprimido"' not in found_block.group(0) and 'data-situacao="ausente"' not in found_block.group(0):
+                        raise BuildError(f"{school['co']}/{stage}/{block}: n ausente não foi suprimido")
+                    if PHRASE_ENROLLMENT_2025 not in re.sub(r"<[^>]+>", "", snippet):
+                        raise BuildError(f"{school['co']}/{stage}/{block}: falta a frase de 2025")
                 else:
-                    if 'data-situacao="suprimido"' not in achado.group(0):
-                        raise BuildError(f"{escola['co']}/{etapa}/{bloco}: n < {limiar} não foi suprimido")
-                    if nota not in re.sub(r"<[^>]+>", "", trecho):
-                        raise BuildError(f"{escola['co']}/{etapa}/{bloco}: falta a nota de amostra pequena")
-                if re.search(rf'data-numero="{bloco}-[^"]+"', trecho):
-                    raise BuildError(f"{escola['co']}/{etapa}/{bloco}: publica taxa sem denominador")
+                    if 'data-situacao="suprimido"' not in found_block.group(0):
+                        raise BuildError(f"{school['co']}/{stage}/{block}: n < {threshold} não foi suprimido")
+                    if note not in re.sub(r"<[^>]+>", "", snippet):
+                        raise BuildError(f"{school['co']}/{stage}/{block}: falta a nota de amostra pequena")
+                if re.search(rf'data-numero="{block}-[^"]+"', snippet):
+                    raise BuildError(f"{school['co']}/{stage}/{block}: publica taxa sem denominador")
 
-    alvo = "53001419"
-    markup = _html(site, alvo)
-    if 15 < limiar:
+    target = "53001419"
+    markup = read_page(site, target)
+    if 15 < threshold:
         if "15 alunos nesta etapa — o indicador não é publicado quando a turma é pequena" not in re.sub(
             r"<[^>]+>", "", markup
         ):
-            raise BuildError(f"{alvo}: falta a nota de 15 alunos")
+            raise BuildError(f"{target}: falta a nota de 15 alunos")
         if "0,0%" in markup:
-            raise BuildError(f"{alvo}: TDI 0,0% aparece como taxa mesmo com 15 alunos")
+            raise BuildError(f"{target}: TDI 0,0% aparece como taxa mesmo com 15 alunos")
     return (
-        f"{unidades:,} unidades escola × etapa com n < {limiar} suprimidas "
-        f"({com_tdi:,} delas com TDI valor/zero, a matriz do q16); "
-        f"{sem_matricula:,} sem matrícula de 2025 também suprimidas"
+        f"{units:,} unidades escola × etapa com n < {threshold} suprimidas "
+        f"({with_tdi:,} delas com TDI valor/zero, a matriz do q16); "
+        f"{without_enrollment:,} sem matrícula de 2025 também suprimidas"
     )
 
 
-def check_estados(site: Path, dados: dict, limiar: int) -> str:
-    frases = {
-        "53000862": [FRASE_IDEB_PUBLICA],
-        "53000781": [FRASE_IDEB_PRIVADA],
-        "53000226": [FRASE_ETAPA],
-        "53020529": [FRASE_CENSO_2024_SEM_LINHA, FRASE_SEM_INDICADOR],
-        "53013662": [FRASE_MATRICULA_2024],
-        "53000331": [FRASE_SEM_INDICADOR],
+def check_states(site: Path, data: dict, threshold: int) -> str:
+    phrases = {
+        "53000862": [PHRASE_IDEB_PUBLIC],
+        "53000781": [PHRASE_IDEB_PRIVATE],
+        "53000226": [PHRASE_STAGE_NOT_OFFERED],
+        "53020529": [PHRASE_CENSUS_2024_NO_ROW, PHRASE_NO_INDICATOR],
+        "53013662": [PHRASE_ENROLLMENT_2024],
+        "53000331": [PHRASE_NO_INDICATOR],
     }
-    if 15 < limiar:
-        frases["53001419"] = [
+    if 15 < threshold:
+        phrases["53001419"] = [
             "15 alunos nesta etapa — o indicador não é publicado quando a turma é pequena"
         ]
-    for co, lista in frases.items():
-        markup = _html(site, co)
-        texto_visivel = re.sub(r"<[^>]+>", "", markup)
-        for frase in lista:
-            if frase not in texto_visivel:
-                raise BuildError(f"{co}: frase ausente ou com redação diferente: {frase!r}")
+    for code, entries in phrases.items():
+        markup = read_page(site, code)
+        visible_text = re.sub(r"<[^>]+>", "", markup)
+        for phrase in entries:
+            if phrase not in visible_text:
+                raise BuildError(f"{code}: frase ausente ou com redação diferente: {phrase!r}")
 
-    for escola in dados["escolas"]:
-        markup = _html(site, escola["co"])
+    for school in data["escolas"]:
+        markup = read_page(site, school["co"])
         if "NaN" in markup:
-            raise BuildError(f"{escola['co']}: NaN na página")
-        texto_visivel = re.sub(r"<[^>]+>", "", markup)
-        if not escola["censo_2024_presente"]:
-            if FRASE_CENSO_2024_SEM_LINHA not in texto_visivel:
-                raise BuildError(f"{escola['co']}: sem linha em 2024 e sem a frase de L-63")
-            if FRASE_MATRICULA_2024 in texto_visivel:
-                raise BuildError(f"{escola['co']}: sem linha em 2024 com a frase de célula vazia")
-        elif any(escola.get(f"mat_{etapa}_2024") is None for etapa in ("CRE", "AI", "AF", "EM")):
-            if FRASE_MATRICULA_2024 not in texto_visivel:
-                raise BuildError(f"{escola['co']}: célula vazia em 2024 sem a frase de L-28")
-            if FRASE_CENSO_2024_SEM_LINHA in texto_visivel:
-                raise BuildError(f"{escola['co']}: linha em 2024 com a frase de escola ausente")
+            raise BuildError(f"{school['co']}: NaN na página")
+        visible_text = re.sub(r"<[^>]+>", "", markup)
+        if not school["censo_2024_presente"]:
+            if PHRASE_CENSUS_2024_NO_ROW not in visible_text:
+                raise BuildError(f"{school['co']}: sem linha em 2024 e sem a frase de L-63")
+            if PHRASE_ENROLLMENT_2024 in visible_text:
+                raise BuildError(f"{school['co']}: sem linha em 2024 com a frase de célula vazia")
+        elif any(school.get(f"mat_{stage}_2024") is None for stage in ("CRE", "AI", "AF", "EM")):
+            if PHRASE_ENROLLMENT_2024 not in visible_text:
+                raise BuildError(f"{school['co']}: célula vazia em 2024 sem a frase de L-28")
+            if PHRASE_CENSUS_2024_NO_ROW in visible_text:
+                raise BuildError(f"{school['co']}: linha em 2024 com a frase de escola ausente")
         elif (
-            FRASE_MATRICULA_2024 in texto_visivel
-            or FRASE_CENSO_2024_SEM_LINHA in texto_visivel
+            PHRASE_ENROLLMENT_2024 in visible_text
+            or PHRASE_CENSUS_2024_NO_ROW in visible_text
         ):
-            raise BuildError(f"{escola['co']}: frase de 2024 sem ausência de 2024")
-        for estado, trecho in re.findall(
+            raise BuildError(f"{school['co']}: frase de 2024 sem ausência de 2024")
+        for state, snippet in re.findall(
             r'data-estado="(ausente|nao_aplicavel|zero|valor)"[^>]*>([^<]*)<', markup
         ):
-            texto = html.unescape(trecho).strip()
-            if estado == "ausente" and texto and not texto.startswith("-"):
-                raise BuildError(f"{escola['co']}: estado ausente sem hífen: {texto!r}")
-            if estado == "nao_aplicavel" and texto and not texto.startswith("—"):
-                raise BuildError(f"{escola['co']}: estado nao_aplicavel sem travessão: {texto!r}")
-            if estado == "zero" and texto and not texto.startswith("0"):
-                raise BuildError(f"{escola['co']}: estado zero sem 0: {texto!r}")
+            text = html.unescape(snippet).strip()
+            if state == "ausente" and text and not text.startswith("-"):
+                raise BuildError(f"{school['co']}: estado ausente sem hífen: {text!r}")
+            if state == "nao_aplicavel" and text and not text.startswith("—"):
+                raise BuildError(f"{school['co']}: estado nao_aplicavel sem travessão: {text!r}")
+            if state == "zero" and text and not text.startswith("0"):
+                raise BuildError(f"{school['co']}: estado zero sem 0: {text!r}")
     return "símbolos, frases de 2024 e presença no Censo conferidos"
 
 
-def _hashes_site(site: Path) -> dict[str, str]:
+def site_hashes(site: Path) -> dict[str, str]:
     return {
-        str(p.relative_to(site)): _sha256(p)
+        str(p.relative_to(site)): sha256(p)
         for p in sorted(site.rglob("*"))
         if p.is_file()
     }
 
 
-def check_reprodutibilidade(public: Path, site: Path, data_build: str, limiar: int) -> str:
-    base_temporaria = Path("/tmp/opencode") if Path("/tmp/opencode").is_dir() else None
-    with tempfile.TemporaryDirectory(prefix="prova-dos-nove-site-", dir=base_temporaria) as tmp:
-        construir_site(public, Path(tmp), data_build, limiar, quiet=True)
-        a = _hashes_site(site)
-        b = _hashes_site(Path(tmp))
+def check_reproducibility(public: Path, site: Path, data_build: str, threshold: int) -> str:
+    temp_base = Path("/tmp/opencode") if Path("/tmp/opencode").is_dir() else None
+    with tempfile.TemporaryDirectory(prefix="prova-dos-nove-site-", dir=temp_base) as tmp:
+        build_site(public, Path(tmp), data_build, threshold, quiet=True)
+        a = site_hashes(site)
+        b = site_hashes(Path(tmp))
         if a != b:
-            diferentes = sorted(set(a) ^ set(b)) or sorted(k for k in a if a.get(k) != b.get(k))
-            raise BuildError(f"build não é idempotente; arquivos diferentes: {diferentes[:5]}")
+            differing = sorted(set(a) ^ set(b)) or sorted(k for k in a if a.get(k) != b.get(k))
+            raise BuildError(f"build não é idempotente; arquivos diferentes: {differing[:5]}")
     return "segundo build produz os mesmos bytes"
 
 
-def check_casos_limite(public: Path, data_build: str) -> str:
+def check_edge_cases(public: Path, data_build: str) -> str:
     """Reproduz os casos de borda em uma cópia do insumo, sem build completo.
 
     Copia `data/public/` para um diretório temporário, altera as escolas dos
-    casos, recalcula o sha256 e passa pelo `carregar_dados` (portanto pela coluna
+    casos, recalcula o sha256 e passa pelo `load_data` (portanto pela coluna
     nova e pelo guard de sha256). Renderiza só as escolas afetadas.
     """
     public = Path(public)
-    base_temporaria = Path("/tmp/opencode") if Path("/tmp/opencode").is_dir() else None
-    colunas_2024 = ["mat_inf_cre_2024", "mat_fund_ai_2024", "mat_fund_af_2024", "mat_med_2024"]
-    with tempfile.TemporaryDirectory(prefix="prova-dos-nove-casos-", dir=base_temporaria) as tmp:
+    temp_base = Path("/tmp/opencode") if Path("/tmp/opencode").is_dir() else None
+    columns_2024 = ["mat_inf_cre_2024", "mat_fund_ai_2024", "mat_fund_af_2024", "mat_med_2024"]
+    with tempfile.TemporaryDirectory(prefix="prova-dos-nove-casos-", dir=temp_base) as tmp:
         tmp = Path(tmp)
-        for nome in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet", "procedencia.json"):
-            shutil.copy2(public / nome, tmp / nome)
+        for name in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet", "procedencia.json"):
+            shutil.copy2(public / name, tmp / name)
 
-        escolas = pd.read_parquet(tmp / "escolas.parquet")
+        schools = pd.read_parquet(tmp / "escolas.parquet")
 
-        def altera(co: str, coluna: str, valor) -> None:
-            mascara = escolas["co_entidade"].astype(str) == co
-            if not mascara.any():
-                raise BuildError(f"caso de limite: escola {co} não está no insumo")
-            escolas.loc[mascara, coluna] = valor
+        def alter(code: str, column: str, value) -> None:
+            mask = schools["co_entidade"].astype(str) == code
+            if not mask.any():
+                raise BuildError(f"caso de limite: escola {code} não está no insumo")
+            schools.loc[mask, column] = value
 
         # 2025 sem matrícula em anos iniciais; creche 2025 sem matrícula.
-        altera("53000854", "mat_fund_ai_2025", pd.NA)
-        altera("53000781", "mat_inf_cre_2025", pd.NA)
+        alter("53000854", "mat_fund_ai_2025", pd.NA)
+        alter("53000781", "mat_inf_cre_2025", pd.NA)
         # Os dois casos de 2024: sem linha e com linha e células vazias.
-        altera("53020529", "censo_2024_presente", False)
-        for coluna in colunas_2024:
-            altera("53020529", coluna, pd.NA)
-        altera("53013662", "censo_2024_presente", True)
-        for coluna in colunas_2024:
-            altera("53013662", coluna, pd.NA)
+        alter("53020529", "censo_2024_presente", False)
+        for column in columns_2024:
+            alter("53020529", column, pd.NA)
+        alter("53013662", "censo_2024_presente", True)
+        for column in columns_2024:
+            alter("53013662", column, pd.NA)
         # Oferta de 2025 não descreve a matrícula de 2024.
-        altera("53014618", "oferta_fund_ai", 0)
-        altera("53014618", "mat_fund_ai_2024", 493)
+        alter("53014618", "oferta_fund_ai", 0)
+        alter("53014618", "mat_fund_ai_2024", 493)
         # n = 0 precisa ser gravado como 0 quando o limiar é 0.
-        altera("53000986", "mat_med_2025", 0)
+        alter("53000986", "mat_med_2025", 0)
         # Creche com célula vazia em 2024 (o 53000781 tem 2024 com valor).
-        altera("53001419", "mat_inf_cre_2024", pd.NA)
+        alter("53001419", "mat_inf_cre_2024", pd.NA)
 
-        for coluna in (
+        for column in (
             "mat_inf_cre_2024", "mat_fund_ai_2024", "mat_fund_af_2024", "mat_med_2024",
             "mat_inf_cre_2025", "mat_fund_ai_2025", "mat_fund_af_2025", "mat_med_2025",
         ):
-            escolas[coluna] = escolas[coluna].astype("Int64")
-        escolas["censo_2024_presente"] = escolas["censo_2024_presente"].astype(bool)
-        escolas.to_parquet(tmp / "escolas.parquet", index=False)
+            schools[column] = schools[column].astype("Int64")
+        schools["censo_2024_presente"] = schools["censo_2024_presente"].astype(bool)
+        schools.to_parquet(tmp / "escolas.parquet", index=False)
 
-        procedencia = json.loads((tmp / "procedencia.json").read_text(encoding="utf-8"))
-        procedencia["sha256"]["escolas.parquet"] = _sha256(tmp / "escolas.parquet")
+        provenance = json.loads((tmp / "procedencia.json").read_text(encoding="utf-8"))
+        provenance["sha256"]["escolas.parquet"] = sha256(tmp / "escolas.parquet")
         (tmp / "procedencia.json").write_text(
-            json.dumps(procedencia, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+            json.dumps(provenance, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
             encoding="utf-8",
         )
 
-        dados = carregar_dados(tmp)
+        data = load_data(tmp)
 
-        def pagina(co: str, limiar: int) -> tuple[PaginaEscola, str, str]:
-            escola = dados["por_co"][co]
-            p = PaginaEscola(dados, escola, data_build, limiar)
+        def page(code: str, threshold: int) -> tuple[SchoolPage, str, str]:
+            school = data["por_co"][code]
+            p = SchoolPage(data, school, data_build, threshold)
             markup = p.render()
             return p, markup, re.sub(r"<[^>]+>", "", markup)
 
-        def numero(p: PaginaEscola, identificador: str) -> dict:
-            for item in p.numeros:
-                if item["id"] == identificador:
+        def number(p: SchoolPage, identifier: str) -> dict:
+            for item in p.numbers:
+                if item["id"] == identifier:
                     return item
-            raise BuildError(f"caso de limite: falta o número {identificador}")
+            raise BuildError(f"caso de limite: falta o número {identifier}")
 
         # 1. 2024 sem linha: frase de L-63, nunca a de célula vazia.
-        p, markup, texto = pagina("53020529", 30)
-        if FRASE_CENSO_2024_SEM_LINHA not in texto:
+        p, markup, text = page("53020529", 30)
+        if PHRASE_CENSUS_2024_NO_ROW not in text:
             raise BuildError("53020529: falta 'a escola não consta do Censo de 2024'")
-        if FRASE_MATRICULA_2024 in texto:
+        if PHRASE_ENROLLMENT_2024 in text:
             raise BuildError("53020529: usa a frase de célula vazia sem ter linha em 2024")
-        if numero(p, "matricula-ai-2024")["estado"] != "ausente":
+        if number(p, "matricula-ai-2024")["estado"] != "ausente":
             raise BuildError("53020529: matrícula de 2024 não está ausente")
 
         # 2. 2024 com linha e célula vazia: frase de L-28.
-        p, markup, texto = pagina("53013662", 30)
-        if FRASE_MATRICULA_2024 not in texto:
+        p, markup, text = page("53013662", 30)
+        if PHRASE_ENROLLMENT_2024 not in text:
             raise BuildError("53013662: falta 'matrícula não declarada no Censo de 2024'")
-        if FRASE_CENSO_2024_SEM_LINHA in texto:
+        if PHRASE_CENSUS_2024_NO_ROW in text:
             raise BuildError("53013662: usa a frase de escola ausente tendo linha em 2024")
-        if numero(p, "matricula-ai-2024")["estado"] != "ausente":
+        if number(p, "matricula-ai-2024")["estado"] != "ausente":
             raise BuildError("53013662: matrícula de 2024 não está ausente")
 
         # 3. 2025 sem matrícula: sem taxa, n = -, Ideb com n null. n_referencia
         #    só aparece nas linhas históricas com n presente (teste 3b).
-        p, markup, texto = pagina("53000854", 30)
-        if FRASE_MATRICULA_2025 not in texto:
+        p, markup, text = page("53000854", 30)
+        if PHRASE_ENROLLMENT_2025 not in text:
             raise BuildError("53000854: falta 'matrícula não declarada no Censo de 2025'")
-        if "n = -" not in texto:
+        if "n = -" not in text:
             raise BuildError("53000854: a linha do n não mostra '-'")
-        if numero(p, "matricula-ai-2025")["estado"] != "ausente":
+        if number(p, "matricula-ai-2025")["estado"] != "ausente":
             raise BuildError("53000854: matrícula de AI em 2025 não está ausente")
-        for item in p.numeros:
+        for item in p.numbers:
             if item["bloco"] in ("fluxo", "tdi", "tnr") and item["etapa"] == "anos iniciais":
                 raise BuildError(f"53000854: publica taxa de AI sem denominador ({item['id']})")
-            if item["bloco"] in FAMILIAS_N_ALUNOS and item["n"] == 1:
+            if item["bloco"] in STUDENT_COUNT_FAMILIES and item["n"] == 1:
                 raise BuildError(f"53000854: n virou 1 em {item['id']}")
             if item["bloco"] == "ideb" and item["etapa"] == "anos iniciais":
                 if item["ano"] == "2025":
@@ -1699,7 +1699,7 @@ def check_casos_limite(public: Path, data_build: str) -> str:
                         )
 
         # 3b. Ideb histórico com n presente continua carimbando o ano do n.
-        for item in p.numeros:
+        for item in p.numbers:
             if (
                 item["bloco"] == "ideb"
                 and item["etapa"] == "anos finais"
@@ -1713,38 +1713,38 @@ def check_casos_limite(public: Path, data_build: str) -> str:
                     )
 
         # 4. Creche 2025 ausente usa a frase de 2025; 2024 presente não a usa.
-        p, markup, texto = pagina("53000781", 30)
-        if FRASE_MATRICULA_2025 not in texto:
+        p, markup, text = page("53000781", 30)
+        if PHRASE_ENROLLMENT_2025 not in text:
             raise BuildError("53000781: falta a frase de 2025 no bloco da creche")
-        if FRASE_MATRICULA_2024 in texto or FRASE_CENSO_2024_SEM_LINHA in texto:
+        if PHRASE_ENROLLMENT_2024 in text or PHRASE_CENSUS_2024_NO_ROW in text:
             raise BuildError("53000781: bloco da creche com frase de 2024 sem célula vazia")
-        if numero(p, "creche-2025")["estado"] != "ausente":
+        if number(p, "creche-2025")["estado"] != "ausente":
             raise BuildError("53000781: creche 2025 não está ausente")
-        if numero(p, "creche-2024")["estado"] != "valor":
+        if number(p, "creche-2024")["estado"] != "valor":
             raise BuildError("53000781: creche 2024 deveria continuar com valor")
 
         # 4b. Creche com célula vazia em 2024 usa a frase de L-28.
-        p, markup, texto = pagina("53001419", 30)
-        if FRASE_MATRICULA_2024 not in texto:
+        p, markup, text = page("53001419", 30)
+        if PHRASE_ENROLLMENT_2024 not in text:
             raise BuildError("53001419: falta a frase de célula vazia de 2024 na creche")
-        if numero(p, "creche-2024")["estado"] != "ausente":
+        if number(p, "creche-2024")["estado"] != "ausente":
             raise BuildError("53001419: creche 2024 não está ausente")
 
         # 5. 36 school-years: oferta de 2025 não apaga matrícula positiva de 2024.
-        p, markup, texto = pagina("53014618", 30)
-        item = numero(p, "matricula-ai-2024")
+        p, markup, text = page("53014618", 30)
+        item = number(p, "matricula-ai-2024")
         if item["estado"] != "valor" or item["valor"] != 493:
             raise BuildError("53014618: 493 alunos em AI/2024 não aparecem como valor")
 
         # 6. Limiar 0: n = 0 é gravado como 0, não como 1.
-        p, markup, texto = pagina("53000986", 0)
-        taxas = [
-            item for item in p.numeros
+        p, markup, text = page("53000986", 0)
+        rates = [
+            item for item in p.numbers
             if item["bloco"] in ("fluxo", "tdi", "tnr") and item["etapa"] == "ensino médio"
         ]
-        if not taxas:
+        if not rates:
             raise BuildError("53000986: nenhuma taxa do médio renderizada a limiar 0")
-        if any(item["n"] != 0 for item in taxas):
+        if any(item["n"] != 0 for item in rates):
             raise BuildError("53000986: n=0 não foi gravado como 0 a limiar 0")
 
     return (
@@ -1753,44 +1753,44 @@ def check_casos_limite(public: Path, data_build: str) -> str:
     )
 
 
-def check_licencas(site: Path, dados: dict) -> str:
-    registros = dados["registros"]
-    licenca_por_fonte: dict[str, tuple[str, str | None]] = {}
-    for familia, registro in registros.items():
-        licenca = registro.get("licenca")
-        if not licenca:
-            raise BuildError(f"registro {familia!r} sem licença em procedencia.json")
-        minusculo = str(licenca).lower()
-        if any(termo in minusculo for termo in ("odbl", "odc", "open data commons")):
-            raise BuildError(f"registro {familia!r} publicado sob licença ODbL: {licenca!r}")
-        licenca_por_fonte[registro["fonte"]] = (licenca, registro.get("licenca_url"))
+def check_licenses(site: Path, data: dict) -> str:
+    records = data["registros"]
+    license_by_source: dict[str, tuple[str, str | None]] = {}
+    for family, record in records.items():
+        license_name = record.get("licenca")
+        if not license_name:
+            raise BuildError(f"registro {family!r} sem licença em procedencia.json")
+        lowercase = str(license_name).lower()
+        if any(term in lowercase for term in ("odbl", "odc", "open data commons")):
+            raise BuildError(f"registro {family!r} publicado sob licença ODbL: {license_name!r}")
+        license_by_source[record["fonte"]] = (license_name, record.get("licenca_url"))
 
-    fontes = set()
-    for caminho in sorted((site / "dados").glob("*.json")):
-        registro = json.loads(caminho.read_text(encoding="utf-8"))
-        for numero in registro["numeros"]:
-            fonte = numero["fonte"]
-            fontes.add(fonte)
-            minusculo = fonte.lower()
-            for termo in ("odbl", "odc", "open data commons", "matriculas__relatorio_matriculas"):
-                if termo in minusculo:
-                    raise BuildError(f"{caminho.name}: fonte ODbL/matrículas proibida: {fonte}")
-            if fonte not in licenca_por_fonte:
-                raise BuildError(f"{caminho.name}: fonte {fonte!r} sem licença no insumo")
+    sources = set()
+    for path in sorted((site / "dados").glob("*.json")):
+        record = json.loads(path.read_text(encoding="utf-8"))
+        for number in record["numeros"]:
+            source = number["fonte"]
+            sources.add(source)
+            lowercase = source.lower()
+            for term in ("odbl", "odc", "open data commons", "matriculas__relatorio_matriculas"):
+                if term in lowercase:
+                    raise BuildError(f"{path.name}: fonte ODbL/matrículas proibida: {source}")
+            if source not in license_by_source:
+                raise BuildError(f"{path.name}: fonte {source!r} sem licença no insumo")
 
-    creditos = (site / "creditos.html").read_text(encoding="utf-8")
-    for fonte in fontes:
-        if fonte not in creditos:
-            raise BuildError(f"creditos.html não lista a fonte {fonte!r}")
-        licenca, url = licenca_por_fonte[fonte]
-        if html.escape(licenca) not in creditos:
-            raise BuildError(f"creditos.html não mostra a licença de {fonte!r}")
-        if url and html.escape(url, quote=True) not in creditos:
-            raise BuildError(f"creditos.html não mostra a licenca_url de {fonte!r}")
-    for obrigatorio in ("MIT", "CC BY 4.0", "Marcelo Anaissi"):
-        if obrigatorio not in creditos:
-            raise BuildError(f"creditos.html sem {obrigatorio!r}")
-    return f"{len(fontes)} fontes com licença declarada nos créditos"
+    credits_html = (site / "creditos.html").read_text(encoding="utf-8")
+    for source in sources:
+        if source not in credits_html:
+            raise BuildError(f"creditos.html não lista a fonte {source!r}")
+        license_name, url = license_by_source[source]
+        if html.escape(license_name) not in credits_html:
+            raise BuildError(f"creditos.html não mostra a licença de {source!r}")
+        if url and html.escape(url, quote=True) not in credits_html:
+            raise BuildError(f"creditos.html não mostra a licenca_url de {source!r}")
+    for required in ("MIT", "CC BY 4.0", "Marcelo Anaissi"):
+        if required not in credits_html:
+            raise BuildError(f"creditos.html sem {required!r}")
+    return f"{len(sources)} fontes com licença declarada nos créditos"
 
 
 # --------------------------------------------------------------------------
@@ -1801,8 +1801,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Build estático da página por escola (FASE-1).")
     ap.add_argument("--public", type=Path, default=Path("data/public"), help="diretório do insumo público")
     ap.add_argument("--out", type=Path, default=Path("site"), help="diretório de saída")
-    ap.add_argument("--data-build", default=DATA_BUILD_PADRAO, help="único carimbo de tempo do build")
-    ap.add_argument("--limiar-n", type=int, default=LIMIAR_N_PADRAO, help="limiar de n pequeno (D4)")
+    ap.add_argument("--data-build", default=DEFAULT_DATA_BUILD, help="único carimbo de tempo do build")
+    ap.add_argument("--limiar-n", type=int, default=DEFAULT_N_THRESHOLD, help="limiar de n pequeno (D4)")
     ap.add_argument("--check", action="store_true", help="roda os critérios do §8 e os casos de limite")
     ap.add_argument("--check-procedencia", action="store_true", help="critério 1: procedência de todo número")
     ap.add_argument("--check-limiar", action="store_true", help="critério 3: n < limiar não publica taxa")
@@ -1814,47 +1814,47 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--limiar-n não pode ser negativo")
 
     try:
-        resultado = construir_site(args.public, args.out, args.data_build, args.limiar_n)
+        result = build_site(args.public, args.out, args.data_build, args.limiar_n)
     except (BuildError, FileNotFoundError, ValueError) as exc:
         print(f"ERRO: {exc}")
         return 1
 
-    selecionados = []
+    selected = []
     if args.check:
-        selecionados = [
+        selected = [
             "procedencia", "ranking", "limiar", "estados",
             "reprodutibilidade", "licencas", "casos_limite",
         ]
     else:
         if args.check_procedencia:
-            selecionados.append("procedencia")
+            selected.append("procedencia")
         if args.check_limiar:
-            selecionados.append("limiar")
+            selected.append("limiar")
         if args.check_estados:
-            selecionados.append("estados")
+            selected.append("estados")
         if args.check_licencas:
-            selecionados.append("licencas")
+            selected.append("licencas")
         if args.check_casos:
-            selecionados.append("casos_limite")
+            selected.append("casos_limite")
 
-    verificacoes = {
-        "procedencia": lambda: check_procedencia(args.out, resultado["dados"], args.data_build),
-        "ranking": lambda: check_sem_ranking(args.out),
-        "limiar": lambda: check_limiar(args.out, resultado["dados"], args.limiar_n),
-        "estados": lambda: check_estados(args.out, resultado["dados"], args.limiar_n),
-        "reprodutibilidade": lambda: check_reprodutibilidade(
+    checks_by_key = {
+        "procedencia": lambda: check_provenance(args.out, result["dados"], args.data_build),
+        "ranking": lambda: check_no_ranking(args.out),
+        "limiar": lambda: check_threshold(args.out, result["dados"], args.limiar_n),
+        "estados": lambda: check_states(args.out, result["dados"], args.limiar_n),
+        "reprodutibilidade": lambda: check_reproducibility(
             args.public, args.out, args.data_build, args.limiar_n
         ),
-        "licencas": lambda: check_licencas(args.out, resultado["dados"]),
-        "casos_limite": lambda: check_casos_limite(args.public, args.data_build),
+        "licencas": lambda: check_licenses(args.out, result["dados"]),
+        "casos_limite": lambda: check_edge_cases(args.public, args.data_build),
     }
-    for nome in selecionados:
+    for name in selected:
         try:
-            detalhe = verificacoes[nome]()
+            detail = checks_by_key[name]()
         except BuildError as exc:
-            print(f"[falhou] {nome}: {exc}")
+            print(f"[falhou] {name}: {exc}")
             return 1
-        print(f"[ok] {nome}: {detalhe}")
+        print(f"[ok] {name}: {detail}")
     return 0
 
 
