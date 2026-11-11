@@ -216,6 +216,14 @@ Regras da home:
   string decimal** (`fmt_pct`): 8,95 → 9,0; 4,05 → 4,1; 0,3499 → 0,3. As páginas
   de escola continuam com `fmt_dec`.
 
+Se o limiar for aplicado ao agregado, as cinco peças mudam no mesmo commit:
+`06_analysis.py` (o export passa a receber o limiar e `CALCULO_TDI_REDE` perde a
+ressalva da turma pequena), `contract.py` (`PHRASE_HOME_NETWORK_COMPARISON`),
+`README.md` e `REPORT.md` (medianas 8,9 / 17,0 / 20,5 e 1,3 / 3,2 / 4,5), L-67 em
+`docs/LIMITES.md` e `data/public/` (`agregados.parquet` e `procedencia.json`). O
+critério 9 falha até as peças se alinharem, porque confere a legenda e a ressalva
+da turma pequena em cada registro `tdi-*`.
+
 ### 2.4 A metodologia (`metodologia.html`)
 
 Página de método para quem audita, separada de `como-ler.html`, que continua
@@ -695,8 +703,10 @@ python scripts/12_build_site.py --public data/public --out site \
 **9. A home.** Todo `data-numero` de `index.html` tem registro em
 `dados/home.json` com `fonte`, `arquivo` (dentro de `data/public/`), `ano`,
 `calculo`, `estado`, `n` inteiro ou `null` e `limites` não vazios; todo registro
-aparece no HTML e nenhum id se repete no JSON. O texto renderizado bate com o
-parquet pelo mesmo formatador da página (pt-BR, um decimal half-up). As somas da
+aparece no HTML e nenhum id se repete no JSON. Todo id de `agregados.parquet` é
+publicado — id exportado e não usado é id morto e faz o check falhar. O texto
+renderizado bate com o parquet pelo mesmo formatador da página (pt-BR, um decimal
+half-up). As somas da
 ausência fecham (com valor + sem valor = universo; pública + privada = universo;
 linha sem valor + sem linha = sem valor), a contagem de escolas bate com o
 cadastro e a porcentagem da creche é estadual ÷ total. Há exatamente quatro

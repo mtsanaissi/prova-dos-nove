@@ -11,6 +11,17 @@ UF, nível de território) e `agregados.parquet` (contagens e distribuições po
 rede, derivadas dos arquivos por escola). Acrescentar uma tabela a esta pasta
 exige emendar o `AGENTS.md` primeiro.
 
+A lista é de arquivos, não de linhas: um id novo dentro de `agregados.parquet`
+não exige emenda do `AGENTS.md`; tabela nova exige. A fronteira é o `calculo`: se
+o texto do `calculo` da família já descreve a conta do id novo, é linha; se não
+descreve, é família nova em `procedencia.json` — e família nova é decisão de
+fonte, cálculo, limites e licença, não de formato de arquivo.
+
+O agregado é auditado pelo que a home mostra: id exportado e não publicado é id
+morto e faz o `--check` falhar (critério 9). Se um número for exportado e
+deliberadamente não exibido, a saída é **não exportar o id** — nunca afrouxar o
+check.
+
 Gerado por:
 
 ```sh

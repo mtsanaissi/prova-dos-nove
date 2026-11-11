@@ -8,7 +8,8 @@ O check confere o que o critério promete: todo `data-numero` da home tem regist
 completo em `dados/home.json`, o texto renderizado bate com o parquet pelo mesmo
 formatador da página, as somas da ausência fecham, há quatro cartões, a legenda
 do gráfico é a do contrato e diz o que precisa dizer, e a home não publica
-truque de ranking nem link para escola.
+truque de ranking nem link para escola. Nenhum id de `agregados.parquet` fica sem
+publicação: o arquivo é auditado pelo que a home mostra.
 """
 
 from __future__ import annotations
@@ -143,6 +144,12 @@ def check_home(site: Path, data: dict) -> str:
         if identifier not in listed:
             raise BuildError(f"home.json: {identifier} não aparece no HTML")
 
+    orphans = sorted(set(data["agregados"]) - set(by_id))
+    if orphans:
+        raise BuildError(
+            "agregados.parquet com id que a home não publica: " + ", ".join(orphans)
+        )
+
     for identifier in sorted(listed):
         found = re.search(
             rf'data-numero="{re.escape(identifier)}"[^>]*>([^<]*)<', markup
@@ -208,6 +215,7 @@ def check_home(site: Path, data: dict) -> str:
             )
 
     return (
-        f"{len(by_id)} números com procedência, {CARD_COUNT} cartões, "
-        "somas da ausência fechadas e legenda de rede conferida"
+        f"{len(by_id)} números com procedência ({len(data['agregados'])} ids de "
+        f"agregado), {CARD_COUNT} cartões, somas da ausência fechadas e legenda de "
+        "rede conferida"
     )

@@ -163,7 +163,7 @@ coluna `#` é o número do critério no §8 do contrato.
 | 3 | `limiar` | `--check-limiar` | unidade com `n < limiar` não publica taxa |
 | 4 | `estados` | `--check-estados` | `-`, `—`, `0` e as frases fixas |
 | 8 | `sumario_escola` | `--check-sumario-escola` | sumário = seções, ordem e rótulo; creche só com oferta |
-| 9 | `home` | `--check-home` | procedência, somas, quatro cartões e legenda da home |
+| 9 | `home` | `--check-home` | procedência, somas, quatro cartões, legenda da home e nenhum id morto no agregado |
 | 5 | `reprodutibilidade` | — | segundo build com os mesmos bytes |
 | 6 | `licencas` | `--check-licencas` | fonte de cada família nos créditos, sem ODbL |
 | — | `casos_limite` | `--check-casos` | 2024 sem linha/célula vazia, 2025 e creche ausentes, 493 em 2024, limiar 0 |
@@ -295,6 +295,9 @@ git diff -- data/public       # vazio se o dado não mudou
 
 - Mudou campo do insumo ou do parquet publicado: `SCHEMA.md` e o §5.1 do
   contrato.
+- Id novo em `agregados.parquet`: se o `calculo` da família já descreve a conta,
+  é linha; se não descreve, é família nova em `procedencia.json` (decisão de
+  fonte, cálculo, limites e licença).
 - Mudou a página, o bloco ou uma frase de ausência: `docs/FASE-1.md` (o texto é
   contrato, não redação).
 - Descobriu limite novo: `docs/LIMITES.md` com id, evidência e status.
