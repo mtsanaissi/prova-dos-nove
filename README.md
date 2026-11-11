@@ -256,6 +256,7 @@ sobre um universo restrito às escolas que ofertam fundamental/médio).
 ```text
 .
 ├── AGENTS.md               # contexto e convenções do projeto
+├── DESENVOLVIMENTO.md      # guia técnico: ambiente, pipeline, build e publicação
 ├── LICENSE                 # MIT; textos e dados derivados sob CC BY 4.0
 ├── REPORT.md               # relatório da fase de reconhecimento
 ├── SCHEMA.md               # dicionário de dados

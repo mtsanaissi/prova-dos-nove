@@ -125,7 +125,7 @@ h3 { font-size: 1rem; margin: 0 0 .55rem; }
 .tabela-estreita { max-width: 22rem; }
 .num { font-variant-numeric: tabular-nums; font-weight: 600; }
 .simbolo { color: var(--tinta-suave); font-weight: 700; }
-.fonte, .nota, .rodape-pagina {
+.fonte, .nota {
   color: var(--tinta-suave);
   font-size: .78rem;
   line-height: 1.45;
@@ -155,7 +155,6 @@ h3 { font-size: 1rem; margin: 0 0 .55rem; }
   font-size: .9rem;
 }
 .n { color: var(--tinta-suave); font-size: .82rem; margin: .1rem 0 .5rem; }
-.rodape-pagina { margin-top: 1.6rem; }
 .busca, .sumario { margin: 1rem 0 1.2rem; }
 .busca label, .sumario label { display: block; font-weight: 600; margin-bottom: .35rem; }
 .busca input, .sumario select {

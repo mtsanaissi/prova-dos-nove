@@ -269,7 +269,6 @@ class SchoolPage:
 
     def render(self) -> str:
         e = self.e
-        code = e["co"]
         has_ideb = has_published_ideb(self.d, e)
         has_rate = has_rate_row(self.d, e)
 
@@ -297,12 +296,6 @@ class SchoolPage:
             if self._has_section(anchor):
                 parts.append(renderers[anchor]())
 
-        parts.append(
-            f'<p class="rodape-pagina">Procedência de cada número: '
-            f'<a href="dados/{code}.json">dados/{code}.json</a>. '
-            '<a href="como-ler.html">Como ler os números</a> · '
-            '<a href="creditos.html">Créditos e licenças</a>.</p>'
-        )
         parts.append("</main>")
         return "".join(parts)
 
