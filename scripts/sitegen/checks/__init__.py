@@ -17,6 +17,7 @@ from .provenance import check_provenance
 from .ranking import check_no_ranking
 from .region_toc import check_region_toc
 from .reproducibility import check_reproducibility
+from .school_toc import check_school_toc
 from .states import check_states
 from .threshold import check_threshold
 
@@ -68,6 +69,12 @@ CHECKS = (
         "--check-estados",
         "critério 4: valor, zero, ausente e não aplicável",
         lambda ctx: check_states(ctx.out, ctx.data, ctx.threshold),
+    ),
+    Check(
+        "sumario_escola",
+        "--check-sumario-escola",
+        "critério 8: sumário da página da escola",
+        lambda ctx: check_school_toc(ctx.out, ctx.data),
     ),
     Check(
         "reprodutibilidade",

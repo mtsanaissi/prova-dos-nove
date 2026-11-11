@@ -20,6 +20,7 @@ Uso:
     python scripts/12_build_site.py --public data/public --out site \
         --data-build 2026-11-06 --limiar-n 30
     python scripts/12_build_site.py --public data/public --out site --check
+    python scripts/12_build_site.py --public data/public --out site --check-sumario-escola
     python scripts/12_build_site.py --public data/public --out site --check-casos
 """
 

@@ -60,6 +60,31 @@ h2 {
 h3 { font-size: 1rem; margin: 0 0 .55rem; }
 .subtitulo { margin: 0 0 1rem; color: var(--tinta-suave); }
 .trilha { margin: .2rem 0 0; font-size: .85rem; }
+.sumario-escola { margin: 0 0 1rem; }
+.sumario-escola details {
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  background: var(--papel-forte);
+}
+.sumario-escola summary {
+  cursor: pointer;
+  padding: .55rem .8rem;
+  font-weight: 600;
+  font-size: .9rem;
+}
+.sumario-escola summary:focus-visible {
+  outline: 2px solid var(--destaque);
+  outline-offset: 1px;
+}
+.sumario-escola ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 .8rem .6rem;
+  columns: 3 12rem;
+  column-gap: 1rem;
+}
+.sumario-escola li { break-inside: avoid; }
+.sumario-escola a { display: inline-block; padding: .3rem 0; }
 .bloco {
   background: var(--papel-forte);
   border: 1px solid var(--linha);
@@ -67,6 +92,7 @@ h3 { font-size: 1rem; margin: 0 0 .55rem; }
   box-shadow: var(--sombra);
   padding: 1.1rem 1.1rem 1rem;
   margin: 1rem 0;
+  scroll-margin-top: .75rem;
 }
 .etapa {
   border-top: 1px solid var(--linha);
@@ -174,6 +200,6 @@ footer.rodape a { color: var(--destaque); }
 }
 @media print {
   body { background: #fff; }
-  .topo, footer.rodape, .trilha, .sumario { display: none; }
+  .topo, footer.rodape, .trilha, .sumario, .sumario-escola { display: none; }
   .bloco { box-shadow: none; break-inside: avoid; }
 }

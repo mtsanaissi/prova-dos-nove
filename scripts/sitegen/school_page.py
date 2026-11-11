@@ -15,6 +15,22 @@ from .loader import get_indicator, has_published_ideb, has_rate_row
 from .region import region_label
 
 
+# Seções da página, na ordem fixa do contrato: (âncora, rótulo, coluna de condição).
+# Os ids são âncoras públicas e não são renomeados (docs/FASE-1.md §2.2); a
+# coluna de condição só existe no bloco da creche.
+SCHOOL_SECTIONS = (
+    ("identificacao", "Identificação", None),
+    ("oferta", "Oferta por etapa", None),
+    ("matricula", "Matrícula por etapa", None),
+    ("ideb", "Ideb por etapa", None),
+    ("fluxo", "Fluxo escolar", None),
+    ("tdi", "Distorção idade-série", None),
+    ("tnr", "Taxa de não-resposta", None),
+    ("infraestrutura", "Infraestrutura", None),
+    ("creche", "Creche da escola", "oferta_inf_cre"),
+)
+
+
 class SchoolPage:
     """Uma página de escola e o coletor de procedência dos números dela."""
 
@@ -196,6 +212,54 @@ class SchoolPage:
     def _section_heading(self, title: str) -> str:
         return f"<h2>{html.escape(title)}</h2>"
 
+    def _has_section(self, anchor: str) -> bool:
+        """A seção existe nesta escola: sem condição, ou com a coluna igual a 1."""
+        for section_anchor, _, condition in SCHOOL_SECTIONS:
+            if section_anchor == anchor:
+                return condition is None or self.e[condition] == 1
+        raise BuildError(f"seção fora de SCHOOL_SECTIONS: {anchor!r}")
+
+    def _open_section(self, anchor: str) -> str:
+        """Abre a `<section>` do bloco com o `<h2>` que o sumário repete."""
+        for section_anchor, label, _ in SCHOOL_SECTIONS:
+            if section_anchor == anchor:
+                return (
+                    f'<section class="bloco" id="{section_anchor}">'
+                    f"{self._section_heading(label)}"
+                )
+        raise BuildError(f"seção fora de SCHOOL_SECTIONS: {anchor!r}")
+
+    def _renderers(self) -> dict:
+        """Método de renderização de cada âncora, sem `getattr` sobre id português."""
+        return {
+            "identificacao": self._block_identification,
+            "oferta": self._block_offering,
+            "matricula": self._block_enrollment,
+            "ideb": self._block_ideb,
+            "fluxo": self._block_flow,
+            "tdi": self._block_age_grade_distortion,
+            "tnr": self._block_non_response,
+            "infraestrutura": self._block_infrastructure,
+            "creche": self._block_daycare,
+        }
+
+    def toc(self) -> str:
+        """Sumário da página: rótulos apenas, sem número e sem JavaScript."""
+        items = []
+        for anchor, label, _ in SCHOOL_SECTIONS:
+            if self._has_section(anchor):
+                items.append(
+                    f'<li><a href="#{anchor}">{html.escape(label)}</a></li>'
+                )
+        # `role="list"`: `list-style: none` (style.css) tira a semântica de lista
+        # no Safari/VoiceOver; o papel explícito a devolve.
+        return (
+            '<nav class="sumario-escola" aria-label="Seções desta página">'
+            "<details><summary>Nesta página</summary>"
+            f'<ul role="list">{"".join(items)}</ul>'
+            "</details></nav>"
+        )
+
     def _stage_article(self, block: str, stage: str, n: int | None, status: str, body: str) -> str:
         n_attr = "" if n is None else f' data-n="{int(n)}"'
         return (
@@ -216,21 +280,22 @@ class SchoolPage:
             f'<h1>{html.escape(e["nome"])}</h1>'
             f'<p class="subtitulo">{html.escape(region_label(e["ra"]))} · rede {html.escape(e["rede"])}</p>'
         )
+        parts.append(self.toc())
 
         offers_assessed_stage = any(e[offering] for _, _, offering in STAGES)
         if offers_assessed_stage and not has_ideb and not has_rate:
             parts.append(self.absence(PHRASE_NO_INDICATOR, "L-09", "ideb"))
 
-        parts.append(self._block_identification())
-        parts.append(self._block_offering())
-        parts.append(self._block_enrollment())
-        parts.append(self._block_ideb())
-        parts.append(self._block_flow())
-        parts.append(self._block_age_grade_distortion())
-        parts.append(self._block_non_response())
-        parts.append(self._block_infrastructure())
-        if e["oferta_inf_cre"] == 1:
-            parts.append(self._block_daycare())
+        renderers = self._renderers()
+        expected = {anchor for anchor, _, _ in SCHOOL_SECTIONS}
+        if set(renderers) != expected:
+            raise BuildError(
+                "os blocos renderizados não casam com SCHOOL_SECTIONS: "
+                f"{sorted(set(renderers) ^ expected)}"
+            )
+        for anchor, _, _ in SCHOOL_SECTIONS:
+            if self._has_section(anchor):
+                parts.append(renderers[anchor]())
 
         parts.append(
             f'<p class="rodape-pagina">Procedência de cada número: '
@@ -246,8 +311,7 @@ class SchoolPage:
         code = e["co"]
         parts = []
         # 1. identificação
-        parts.append('<section class="bloco" id="identificacao">')
-        parts.append(self._section_heading("Identificação"))
+        parts.append(self._open_section("identificacao"))
         parts.append(
             "<dl class=\"ficha\">"
             f"<dt>Escola</dt><dd>{html.escape(e['nome'])}</dd>"
@@ -265,8 +329,7 @@ class SchoolPage:
         e = self.e
         parts = []
         # 2. oferta
-        parts.append('<section class="bloco" id="oferta">')
-        parts.append(self._section_heading("Oferta por etapa"))
+        parts.append(self._open_section("oferta"))
         parts.append('<table class="tabela"><thead><tr><th>Etapa</th><th>Oferta em 2025</th></tr></thead><tbody>')
         for column, item_label in OFFERINGS:
             value = "oferta" if e[column] == 1 else "não oferta"
@@ -280,8 +343,7 @@ class SchoolPage:
         e = self.e
         parts = []
         # 3. matrícula
-        parts.append('<section class="bloco" id="matricula">')
-        parts.append(self._section_heading("Matrícula por etapa"))
+        parts.append(self._open_section("matricula"))
         parts.append(
             '<table class="tabela"><thead><tr><th>Etapa</th><th>2024</th><th>2025</th></tr></thead><tbody>'
         )
@@ -301,8 +363,7 @@ class SchoolPage:
         code = e["co"]
         parts = []
         # 4. Ideb
-        parts.append('<section class="bloco" id="ideb">')
-        parts.append(self._section_heading("Ideb por etapa"))
+        parts.append(self._open_section("ideb"))
         for stage, item_label, offering in STAGES:
             if not e[offering]:
                 body = (
@@ -344,8 +405,7 @@ class SchoolPage:
         code = e["co"]
         parts = []
         # 5. fluxo
-        parts.append('<section class="bloco" id="fluxo">')
-        parts.append(self._section_heading("Fluxo escolar"))
+        parts.append(self._open_section("fluxo"))
         for stage, item_label, offering in STAGES:
             if not e[offering]:
                 body = f"<h3>{stage_title(item_label)}</h3>" + self.absence(
@@ -389,8 +449,7 @@ class SchoolPage:
         code = e["co"]
         parts = []
         # 6. distorção idade-série
-        parts.append('<section class="bloco" id="tdi">')
-        parts.append(self._section_heading("Distorção idade-série"))
+        parts.append(self._open_section("tdi"))
         for stage, item_label, offering in STAGES:
             if not e[offering]:
                 body = f"<h3>{stage_title(item_label)}</h3>" + self.absence(
@@ -429,8 +488,7 @@ class SchoolPage:
         code = e["co"]
         parts = []
         # 7. não-resposta
-        parts.append('<section class="bloco" id="tnr">')
-        parts.append(self._section_heading("Taxa de não-resposta"))
+        parts.append(self._open_section("tnr"))
         for stage, item_label, offering in STAGES:
             if not e[offering]:
                 body = f"<h3>{stage_title(item_label)}</h3>" + self.absence(
@@ -473,8 +531,7 @@ class SchoolPage:
         code = e["co"]
         parts = []
         # 8. infraestrutura
-        parts.append('<section class="bloco" id="infraestrutura">')
-        parts.append(self._section_heading("Infraestrutura"))
+        parts.append(self._open_section("infraestrutura"))
         infra_universe = e["oferta_fund_ai"] == 1 or e["oferta_fund_af"] == 1 or e["oferta_med"] == 1
         if not infra_universe:
             parts.append(
@@ -507,8 +564,7 @@ class SchoolPage:
     def _block_daycare(self) -> str:
         e = self.e
         parts = []
-        parts.append('<section class="bloco" id="creche">')
-        parts.append(self._section_heading("Creche da escola"))
+        parts.append(self._open_section("creche"))
         parts.append('<table class="tabela tabela-estreita"><thead><tr><th>Ano</th><th>Matrícula em creche</th></tr></thead><tbody>')
         for year in ("2024", "2025"):
             parts.append(

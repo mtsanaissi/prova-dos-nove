@@ -123,6 +123,40 @@ Regras:
 - `indice.json` é `[{co_entidade, nome, ra, rede}]`, ordenado por `nome`, e é o
   único insumo da busca.
 
+### 2.2 O sumário da página da escola
+
+Cada página de escola tem, logo depois do subtítulo e antes do aviso da página e
+da primeira seção, um sumário das seções (critério 8). É um
+`<nav class="sumario-escola" aria-label="Seções desta página">` com um
+`<details>` fechado por padrão, `<summary>Nesta página</summary>` e uma lista sem
+numeração:
+
+```html
+<nav class="sumario-escola" aria-label="Seções desta página"><details><summary>Nesta página</summary><ul role="list"><li><a href="#identificacao">Identificação</a></li>…</ul></details></nav>
+```
+
+As nove âncoras, na ordem fixa do §2, são `identificacao`, `oferta`, `matricula`,
+`ideb`, `fluxo`, `tdi`, `tnr`, `infraestrutura` e `creche`; o link e a seção da
+creche só existem quando `oferta_inf_cre == 1` (475 escolas em 2025). O rótulo de
+cada link é o mesmo `<h2>` da seção.
+
+Regras:
+
+- O sumário é só rótulo: não publica número, contagem, ranking, `data-numero` nem
+  `class="num"`, e não entra em `dados/<CO_ENTIDADE>.json` — não é bloco de dado,
+  não tem fonte, n nem limite próprio.
+- Os ids são âncoras públicas e não são renomeados; a ordem é a ordem fixa do §2,
+  não ordenável por indicador.
+- Fecha por padrão e abre sem JavaScript (`<details>` nativo, por teclado e por
+  clique, com foco visível); a impressão esconde o sumário.
+- A lista é `<ul role="list">`: `list-style: none` (no CSS) tira a semântica de
+  lista no Safari/VoiceOver, e o papel explícito a devolve; o `<nav>` mantém o
+  `aria-label` do marco de navegação.
+- As seções e o sumário saem da mesma lista no gerador
+  (`school_page.SCHOOL_SECTIONS`); o `--check` compara o HTML com uma cópia
+  congelada do contrato (`checks/school_toc.py`), para que renomear um id quebre o
+  build.
+
 ## 3. Contrato de dados
 
 Quatro estados, três símbolos na tela. Nenhum vira `NaN` na saída e nenhum é
@@ -247,7 +281,7 @@ site/
 ├── estilo.css                     # sem framework
 ├── creditos.html                  # licença por fonte e titular (critério 6)
 ├── como-ler.html                  # estados, ausências e limiar de n, explicados uma vez
-├── <CO_ENTIDADE>.html             # uma página por escola (1.291)
+├── <CO_ENTIDADE>.html             # uma página por escola (1.291), com o sumário das seções (§2.2)
 └── dados/<CO_ENTIDADE>.json       # procedência de cada número daquela página
 ```
 
@@ -298,10 +332,17 @@ python scripts/12_build_site.py \
 # verificação dos critérios do §8 (sai != 0 se algum falhar)
 python scripts/12_build_site.py --public data/public --out site \
   --data-build 2026-11-06 --check
+
+# só o critério 8 (sumário da página da escola)
+python scripts/12_build_site.py --public data/public --out site \
+  --data-build 2026-11-06 --check-sumario-escola
 ```
 
 O build vive em `scripts/sitegen/`; `scripts/12_build_site.py` é a CLI e mantém
-o comando acima.
+o comando acima. O `--check` roda os critérios executáveis na ordem do registro
+(`procedencia`, `ranking`, `sumario`, `limiar`, `estados`, `sumario_escola`,
+`reprodutibilidade`, `licencas`) e os casos de limite, e para no primeiro que
+falhar.
 
 - Sem dependência nova: só `pandas` e `pyarrow` (já em `requirements.txt`) e
   HTML montado por f-string. O ambiente de CI instala apenas o `requirements.txt`;
@@ -400,7 +441,7 @@ repo. Tamanho: 1.291 páginas + o JSON por escola; o limite de site publicado é
 1 GB, e o build mede o total e falha se passar de 700 MB.
 
 **Escopo real do gate.** O passo do workflow roda `--check` e constrói `site/`
-antes do upload. Ele cobre os critérios 1–4, 6 e 7, a metade de build do
+antes do upload. Ele cobre os critérios 1–4, 6, 7 e 8, a metade de build do
 critério 5 (idempotência) e os casos de limite. A outra metade do critério 5 —
 `06` sem etapa pulada — continua verificação local, porque `data/interim/` está
 fora do git (`.gitignore`) e o CI não tem como rodar as etapas. O `--check`
@@ -411,7 +452,7 @@ falha antes do upload quando um critério executável regride.
 `--check` roda os critérios executáveis e os casos de limite e para no primeiro
 que falhar. Cada um tem o comando manual equivalente, para quando o `--check`
 discordar de uma pessoa. O `--check` varre todas as 1.291 páginas nos critérios
-1, 3 e 4, todo o HTML e o índice no critério 2, o índice no critério 7, todo o
+1, 3, 4 e 8, todo o HTML e o índice no critério 2, o índice no critério 7, todo o
 `site/dados` no critério 6 e faz um segundo build no critério 5; não há amostra
 de 10 páginas. Os sete perfis do §4 entram na conferência manual e os casos de
 limite no `check_edge_cases`.
@@ -492,6 +533,20 @@ mantêm o valor bruto (§2.1).
 ```bash
 python scripts/12_build_site.py --public data/public --out site \
   --data-build 2026-11-06 --check-sumario
+```
+
+**8. Sumário da página da escola.** Cada uma das 1.291 páginas de escola tem um
+único `<nav class="sumario-escola">` com `aria-label` entre o subtítulo e a
+primeira seção, com um `<details>` fechado e um `<ul role="list">`; os links
+apontam, na ordem, para as seções renderizadas e repetem o rótulo do `<h2>`; cada
+`href="#x"` casa com um único `id="x"`; o link e a seção da creche existem se e
+somente se `oferta_inf_cre == 1`; e o sumário não publica número. A comparação usa
+uma cópia congelada do contrato (`checks/school_toc.py`), e o próprio check testa
+seis mutações que precisam falhar.
+
+```bash
+python scripts/12_build_site.py --public data/public --out site \
+  --data-build 2026-11-06 --check-sumario-escola
 ```
 
 **Casos de limite.** O `--check` também roda a cópia do insumo com 2024 sem
