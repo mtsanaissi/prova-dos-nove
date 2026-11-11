@@ -301,12 +301,16 @@ Formato do `dados/<CO_ENTIDADE>.json`:
       "fonte": "INEP — Ideb por escola",
       "arquivo": "data/public/indicadores.parquet",
       "calculo": "valor observado da etapa, como publicado",
+      "id": "ideb-ai-2025",
       "n": 247,
       "limites": ["L-30", "L-33"]
     }
   ]
 }
 ```
+
+O `id` é obrigatório e único na página: é o valor do `data-numero` do HTML, e o
+`--check` falha quando um número visível não tem entrada (§8, critério 1).
 
 Onde `n` sai: é a matrícula da etapa de 2025 em `escolas.parquet`; `q16`
 (`data/interim/q16_presenca_escola_etapa.csv`) é o artefato que prova a conta, não
@@ -339,10 +343,11 @@ python scripts/12_build_site.py --public data/public --out site \
 ```
 
 O build vive em `scripts/sitegen/`; `scripts/12_build_site.py` é a CLI e mantém
-o comando acima. O `--check` roda os critérios executáveis na ordem do registro
+o comando acima. O `--check` roda as nove verificações na ordem do registro
 (`procedencia`, `ranking`, `sumario`, `limiar`, `estados`, `sumario_escola`,
-`reprodutibilidade`, `licencas`) e os casos de limite, e para no primeiro que
-falhar.
+`reprodutibilidade`, `licencas`, `casos_limite`) e para no primeiro que falhar.
+A ordem documentada é a de `CHECKS`, em `scripts/sitegen/checks/__init__.py`, e
+cada verificação com flag tem o seu `--check-*` (`--check-casos` é a nona).
 
 - Sem dependência nova: só `pandas` e `pyarrow` (já em `requirements.txt`) e
   HTML montado por f-string. O ambiente de CI instala apenas o `requirements.txt`;
@@ -396,8 +401,9 @@ branch aceita apenas `/` ou `/docs` (a documentação oficial do GitHub Pages);
 **GitHub Actions**: `actions/upload-pages-artifact` + `actions/deploy-pages`, com
 `pages: write`, `id-token: write` e o environment `github-pages`.
 
-O workflow entra na fase 2, junto de `scripts/12_build_site.py` — criá-lo antes
-deixaria um job quebrado no `main`. O conteúdo é este:
+O workflow está em `.github/workflows/pages.yml` e é ele que roda o `--check`
+antes do upload. O extrato abaixo reproduz o arquivo para leitura offline; o
+arquivo é a fonte quando os dois divergirem:
 
 ```yaml
 name: pages

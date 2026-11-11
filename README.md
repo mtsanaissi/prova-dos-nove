@@ -124,6 +124,15 @@ no GitHub Pages com `--check` antes do upload; antes do primeiro deploy, é
 preciso ativar Pages em "GitHub Actions" nas configurações do repositório. O
 site não é versionado; o insumo `data/public/` é.
 
+**Sumário e salto (2026-11-10/11).** O índice ganhou salto por Região
+Administrativa: um `<select id="ir-ra">` com as 35 RAs, na ordem do rótulo de
+exibição, que leva à seção `#ra-<slug>` da RA escolhida, com a lista completa e
+alfabética mesmo sem JavaScript (`docs/FASE-1.md` §2.1). Cada página de escola
+abre com um sumário das suas seções: `<details>` fechado por padrão e as nove
+âncoras fixas do contrato (§2.2), sem publicar número. Os dois entraram como
+critérios 7 e 8 do `--check`, que hoje roda as nove entradas do registro —
+critérios 1–8 e os casos de limite.
+
 Fontes baixadas e verificadas, todas com sha256 no `MANIFEST.md` (146 linhas):
 80 arquivos da SEEDF (458 MB), 53 da PDAD-A (100 MB — 50 relatórios, dois
 microdados e o dicionário), 12 da INEP (916 MB) e a malha das RAs (4,6 MB). Os
@@ -255,6 +264,7 @@ sobre um universo restrito às escolas que ofertam fundamental/médio).
 │   ├── nome.md             # a origem do nome, contada para crianças
 │   ├── FASE-1.md           # contrato da página por escola (fase 1)
 │   ├── LIMITES.md          # registro de limites, suposições e riscos
+│   ├── plans/              # planos de execução, por data, com o worklog correspondente
 │   └── worklogs/           # registro técnico do que foi feito, por data
 ├── data/
 │   ├── raw/                # originais (fora do git) + MANIFEST.md (dentro)
