@@ -34,10 +34,13 @@ veredito, não limite.
 
 - Code is in English: identifiers, filenames, functions, modules. Docs
   (`REPORT.md`, `SCHEMA.md`, `MANIFEST.md`, `README.md`), comments and docstrings
-  are in Portuguese.
+  are in Portuguese; `docs/worklogs/` stays in Portuguese and `docs/plans/` has
+  no language rule — a plan may be written in Portuguese or English.
 - Keep original source field names verbatim when mirroring them (`CO_ENTIDADE`,
   `NO_ENTIDADE`); record every rename in `SCHEMA.md`.
 - Scripts numbered by run order: `01_inventory_seedf.py`, `02_download_seedf.py`.
+- The site build lives in `scripts/sitegen/`; `scripts/12_build_site.py` is only
+  its CLI.
 - `data/raw/` is immutable. Normalized output goes to `data/interim/` as
   parquet.
 - `data/` never enters git; `data/raw/MANIFEST.md` does. The one exception is
