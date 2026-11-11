@@ -39,7 +39,7 @@ inteira, n = 1.
 
 | # | bloco | fonte e arquivo | ano | cálculo | n | limites |
 |---|---|---|---|---|---|---|
-| 1 | identificação | cadastro SEEDF, `escolas__relatorio_escolas_2025.parquet` (`Nome da escola`, `Nome RA`, `Nome Rede`) | 2025 | cópia do campo; a RA sai como rótulo de exibição (§2.1) | 1.291 | L-36, L-37 |
+| 1 | identificação | cadastro SEEDF, `escolas__relatorio_escolas_2025.parquet` (`Nome da escola`, `Nome RA`, `Nome Rede`) | 2025 | cópia do campo; a RA sai como rótulo de exibição (§2.1) | 1.291 | L-36, L-37, L-64 |
 | 2 | oferta por etapa | mesmo cadastro, vetor `INF_CRE`…`PROF` (8 sinalizadores) | 2025 | flag 1 = oferta; **não** traduzir "é EI" | 1.291 | L-57, L-36 |
 | 3 | matrícula por etapa | Censo INEP, `censo_escola_df.parquet` (`QT_MAT_INF_CRE`, `QT_MAT_FUND_AI`, `QT_MAT_FUND_AF`, `QT_MAT_MED`) | 2024–2025 | soma da etapa por escola, como está no campo; a presença em 2024 vem da flag `censo_2024_presente`, nunca da oferta de 2025 | 1.360 linhas em 2024 (76 com célula vazia; 53 escolas de 2025 sem linha) e 1.291 em 2025 | L-28, L-43, L-48, L-62, L-63 |
 | 4 | Ideb por etapa | `ideb_escolas_df.parquet`, `indicador = ideb_observado` | 2005–2025, de dois em dois anos | valor observado; **a meta (`ideb_projetado`) não é publicada**; privada só até 2017 | 499 escolas com valor em 2025 | L-08, L-12, L-30, L-33, L-56 |
@@ -102,8 +102,9 @@ mesma página:
   cada uma as escolas em ordem alfabética, com nome e rede (estadual, privada
   conveniada, privada não conveniada, federal).
 
-O rótulo de exibição da RA ("Águas Claras", "Ceilândia", "Sol Nascente/Por do
-Sol") é só de tela: `data-ra`, `indice.json` e `data/public/escolas.parquet`
+O rótulo de exibição da RA ("Águas Claras", "Ceilândia", "Sol Nascente/Pôr do
+Sol") é só de tela e vive numa tabela escrita à mão em `scripts/sitegen/region.py`
+(L-64): `data-ra`, `indice.json` e `data/public/escolas.parquet`
 mantêm o valor bruto do cadastro (`AGUAS CLARAS`, `CEILANDIA`,
 `SOL NASCENTE / POR DO SOL`), e o `#ra-<slug>` (`#ra-aguas-claras`,
 `#ra-ceilandia`) deriva desse valor bruto.

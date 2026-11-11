@@ -46,7 +46,7 @@ REGION_LABELS = {
     "SIA": "SIA",
     "SOBRADINHO": "Sobradinho",
     "SOBRADINHO II": "Sobradinho II",
-    "SOL NASCENTE / POR DO SOL": "Sol Nascente/Por do Sol",
+    "SOL NASCENTE / POR DO SOL": "Sol Nascente/Pôr do Sol",
     "SUDOESTE / OCTOGONAL": "Sudoeste/Octogonal",
     "TAGUATINGA": "Taguatinga",
     "VARJAO": "Varjão",

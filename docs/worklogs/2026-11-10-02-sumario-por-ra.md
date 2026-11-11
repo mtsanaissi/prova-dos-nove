@@ -92,11 +92,33 @@ site: 1,291 páginas de escola, 29.1 MB em site
 - `compileall` e `git diff --check` limpos. `data/public` não mudou: `git diff --
   data/public` vazio; `site/` continua fora do git.
 
+## Correções da revisão (2026-11-10)
+
+- `region.py`: o rótulo de `SOL NASCENTE / POR DO SOL` passa a "Sol Nascente/Pôr
+  do Sol". A revisão pegou a falta do circunflexo; a forma oficial é "Pôr do Sol"
+  (SEGOV-DF, RA XXXII; CLDF; G1). A âncora não muda, porque deriva do valor bruto.
+- `checks/region_toc.py` passou a conferir o que a revisão apontou como sem
+  guarda: o `<noscript><style>.sumario { display: none; }</style></noscript>` no
+  `<head>` do índice (critério 6) e, por seção, que `id` e rótulo derivem do
+  `data-ra` bruto (`region_anchor_id`, `region_label`). Antes o check comparava só
+  a lista de opções com a lista de seções.
+- `docs/LIMITES.md` ganhou **L-64**: o rótulo é tabela escrita à mão, não campo
+  da fonte, e o `calculo` do bloco de identificação em `procedencia.json` segue
+  "cópia dos campos" porque regenerá-lo mudaria `data/public` — que o escopo
+  desta tarefa congela. `docs/FASE-1.md` §2.1 e o bloco 1 citam L-64.
+
 ## Pendências
 
 - Reavaliar se o desktop pede uma visão das 35 RAs além do select (um
   `<details>` ou lista visível entram sem mudar as âncoras).
 - Confirmar a forma oficial de `SCIA`, `SIA`, "Riacho Fundo II" e "Sobradinho II"
-  antes de publicar; hoje seguem o Apêndice A.
+  antes de publicar; hoje seguem o Apêndice A. "Pôr do Sol" foi conferido e
+  corrigido na revisão (L-64).
+- Conferir o salto no Firefox e no Safari. A revisão rodou só no Chromium
+  (headless no Linux), onde a seta num `<select>` fechado abre o popup nativo e
+  não dispara `change`; no Chrome/Windows a seta muda o valor e dispara `change`,
+  e o salto devolve o select ao placeholder a cada escolha. Se o teclado ficar
+  preso na primeira RA, a alternativa é navegar no `blur`/confirm, não no
+  `change`.
 - Reavaliar `<nav>`/`<form>` em volta do select se uma auditoria de
   acessibilidade pedir um landmark.
