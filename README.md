@@ -281,6 +281,7 @@ sobre um universo restrito às escolas que ofertam fundamental/médio).
 │   ├── FASE-1.md           # contrato da página por escola (fase 1)
 │   ├── LIMITES.md          # registro de limites, suposições e riscos
 │   ├── plans/              # planos de execução, por data, com o worklog correspondente
+│   ├── archive/plans/      # planos arquivados
 │   └── worklogs/           # registro técnico do que foi feito, por data
 ├── data/
 │   ├── raw/                # originais (fora do git) + MANIFEST.md (dentro)

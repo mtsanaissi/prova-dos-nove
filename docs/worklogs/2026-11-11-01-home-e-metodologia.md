@@ -1,6 +1,6 @@
 # 2026-11-11-01 — home com números de destaque, lista em `escolas.html` e página de metodologia
 
-Plano: [`docs/plans/2026-11-11-home-e-metodologia.md`](../plans/2026-11-11-home-e-metodologia.md).
+Plano: [`docs/archive/plans/2026-11-11-home-e-metodologia.md`](../archive/plans/2026-11-11-home-e-metodologia.md).
 Contrato: [`docs/FASE-1.md`](../FASE-1.md) §2.1, §2.3, §2.4, §5.1, §5.2 e §8 (critério 9).
 
 ## 1. O que entrou

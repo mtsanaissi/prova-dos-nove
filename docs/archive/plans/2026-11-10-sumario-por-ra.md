@@ -1,9 +1,9 @@
 # Plan — jump to an Administrative Region (RA) on the FASE-1 index
 
 **Date:** 2026-11-10
-**Contract:** [docs/FASE-1.md](../FASE-1.md)
+**Contract:** [docs/FASE-1.md](../../FASE-1.md)
 **Depends on:** [plan 0 — refatorar-build-site](2026-11-10-refatorar-build-site.md) (package `scripts/sitegen/`, English names, check registry, `SchoolPage._block_*`)
-**Input:** [data/public/](../../data/public/) (unchanged)
+**Input:** [data/public/](../../../data/public/) (unchanged)
 **Worklog:** `docs/worklogs/2026-11-10-02-sumario-por-ra.md` (new; Portuguese)
 **Criterion:** adds criterion **7** to FASE-1 §8; `--check` goes from seven to eight items.
 
@@ -12,7 +12,7 @@ into no longer exists after plan 0.
 
 ## 1. Motivation and origin
 
-The entry page (`site/index.html`) is defined in [`docs/FASE-1.md`](../FASE-1.md) §2.1: search by
+The entry page (`site/index.html`) is defined in [`docs/FASE-1.md`](../../FASE-1.md) §2.1: search by
 name, no server, and a list of the 1,291 schools grouped by the 35 Administrative Regions in
 alphabetical order, publishing no number. The list is long; on a phone, reaching a distant RA means
 scrolling through many screens. There is no direct jump to the RA sections.
@@ -103,7 +103,7 @@ accents); `text-transform: capitalize` (adds no accents, yields "Aguas Claras").
 
 **Decision.** The select lists names, not numbers. No "Ceilândia (142)", no "35 RAs".
 
-**Why.** [`docs/FASE-1.md`](../FASE-1.md) §2.1 forbids numbers on the index; a count per RA is a
+**Why.** [`docs/FASE-1.md`](../../FASE-1.md) §2.1 forbids numbers on the index; a count per RA is a
 statistic and would need a source block, a computation and limit ids like any other number. The
 current guard (`check_no_ranking`) catches `class="num"`, `data-numero` and "N escolas"; a bare
 number would slip through. This plan does not widen the guard because it publishes no number; if a
@@ -128,7 +128,7 @@ a sticky sidebar (layout rewrite).
 **Decision.** Jump consistency gets its own function `check_region_toc(site)` in
 `sitegen/checks/region_toc.py`, one registry entry
 `Check("sumario", "--check-sumario", "critério 7: salto por RA e seções na mesma ordem", …)` placed
-**after `ranking`**, and criterion 7 in [`docs/FASE-1.md`](../FASE-1.md) §8. `check_no_ranking` keeps
+**after `ranking`**, and criterion 7 in [`docs/FASE-1.md`](../../FASE-1.md) §8. `check_no_ranking` keeps
 only the "no number" rule. `main` is not edited: plan 0's registry generates the flag and the
 `--check` list.
 

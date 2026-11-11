@@ -1,8 +1,8 @@
 # Plan — split `12_build_site.py` into a package and move code identifiers to English
 
 **Date:** 2026-11-10
-**Contract:** [docs/FASE-1.md](../FASE-1.md) (§5.3, build interface)
-**Build:** [scripts/12_build_site.py](../../scripts/12_build_site.py)
+**Contract:** [docs/FASE-1.md](../../FASE-1.md) (§5.3, build interface)
+**Build:** [scripts/12_build_site.py](../../../scripts/12_build_site.py)
 **Worklog:** `docs/worklogs/2026-11-10-01-refatorar-build-site.md` (new; Portuguese, like the other worklogs)
 **Order:** plan 0 of 3. [sumario-por-ra](2026-11-10-sumario-por-ra.md) runs after this one and
 [sumario-da-escola](2026-11-10-sumario-da-escola.md) after that; both are written against the

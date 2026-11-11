@@ -2,14 +2,14 @@
 
 **Data:** 2026-11-09
 **Revisão:** 2026-11-09 — fecha as diferenças da comparação com a versão anterior: L-63 para a ausência de linha em 2024, `--parcial` (não `--force`) como aceite do export incompleto, `n_referencia` só quando o `n` é contagem de alunos, escopo real do gate no CI e recusa de família ODbL já no export.
-**Contrato:** [docs/FASE-1.md](../FASE-1.md)
-**Build:** [scripts/12_build_site.py](../../scripts/12_build_site.py)
-**Export do insumo:** [scripts/06_analysis.py](../../scripts/06_analysis.py)
-**Insumo versionado:** [data/public/](../../data/public/)
+**Contrato:** [docs/FASE-1.md](../../FASE-1.md)
+**Build:** [scripts/12_build_site.py](../../../scripts/12_build_site.py)
+**Export do insumo:** [scripts/06_analysis.py](../../../scripts/06_analysis.py)
+**Insumo versionado:** [data/public/](../../../data/public/)
 
 ## 1. Motivação e origem
 
-A FASE-1 define uma página estática por escola, em português comum, gerada por Python a partir de `data/public/`, com a série da própria escola e a procedência de cada número. O contrato está em [docs/FASE-1.md](../FASE-1.md), o build em [scripts/12_build_site.py](../../scripts/12_build_site.py) e o recorte público em [scripts/06_analysis.py](../../scripts/06_analysis.py) (`--public`). O site tem 1.291 páginas, índice alfabético por Região Administrativa, `como-ler.html`, `creditos.html` e `dados/<CO_ENTIDADE>.json` com a procedência de cada número.
+A FASE-1 define uma página estática por escola, em português comum, gerada por Python a partir de `data/public/`, com a série da própria escola e a procedência de cada número. O contrato está em [docs/FASE-1.md](../../FASE-1.md), o build em [scripts/12_build_site.py](../../../scripts/12_build_site.py) e o recorte público em [scripts/06_analysis.py](../../../scripts/06_analysis.py) (`--public`). O site tem 1.291 páginas, índice alfabético por Região Administrativa, `como-ler.html`, `creditos.html` e `dados/<CO_ENTIDADE>.json` com a procedência de cada número.
 
 A revisão da implementação em 2026-11-09 encontrou casos em que a página publica uma causa que a fonte não distingue, uma taxa sem denominador ou uma licença inferida; além disso, o gate dos seis critérios do §8 não roda na publicação. Este plano fecha esses casos antes de a fase ser declarada concluída. Ele não altera o desenho do produto, o universo de escolas, o limiar D4 = 30, a regra de não-ranking, a proibição de média/mediana de rede, nem a decisão de não publicar a meta do Ideb (L-56).
 
@@ -41,7 +41,7 @@ O build e o export atuais passam no `--check` sobre o `data/public` versionado: 
 1. **2024: escola ausente vs célula vazia.** O bloco 3 (e o bloco 9, creche) usa uma única frase, "matrícula não declarada no Censo de 2024", para dois casos: 53 escolas de 2025 sem linha no Censo 2024 e 3 escolas com linha e células vazias. Para as 53, "não declarada" nomeia uma causa que a fonte não estabelece; a escola pode simplesmente não existir em 2024. O `check_estados` usa `53020529` (uma das 53) como referência da frase, então o caso de célula vazia (as 3) não é testado.
 2. **2025: matrícula ausente publica taxa com `n=1`.** Em fluxo/TDI/TNR, a supressão só roda quando `n is not None`; com `n` ausente, o código passa `n or 1` a `rate_span` e publica a taxa; o JSON grava `"n": 1`. No Ideb, `n_exibir` vira 1. O `--check` pula `n is None`, então não vê. Reproduzido em uma cópia de `data/public` com `53000854.mat_fund_ai_2025 = NA`: a página publica `fluxo-ai-aprovacao-2025` com `n=1` e "n = - alunos".
 3. **Creche: 2025 rotulado como 2024.** O bloco 9 usa um único `faltam` para os dois anos e sempre anexa a frase de 2024. Com `53000781.mat_inf_cre_2025 = NA`, a página mostra `2025 -` e "matrícula não declarada no Censo de 2024". O bloco 3 já usa uma frase de 2025 ("matrícula não declarada no Censo de 2025"), que não está no §3.1.
-4. **Gate dos seis critérios fora da publicação.** O workflow [.github/workflows/pages.yml](../../.github/workflows/pages.yml) roda o build e envia o `site/`, mas não roda `--check`. Uma regressão em D4, estados, ranking ou licenças publica.
+4. **Gate dos seis critérios fora da publicação.** O workflow [.github/workflows/pages.yml](../../../.github/workflows/pages.yml) roda o build e envia o `site/`, mas não roda `--check`. Uma regressão em D4, estados, ranking ou licenças publica.
 5. **Licença inferida.** `pagina_creditos` mapeia qualquer fonte `SEEDF...` para CC BY e qualquer `INEP...` para "público, sem licença declarada" por prefixo; a página diz "Licença como declarada no catálogo de cada fonte; nenhuma foi inferida". O inventário `data/interim/seedf_datasets.csv` tem 12 conjuntos CC BY e 5 ODbL; os dois conjuntos SEEDF usados (cadastro e infraestrutura) são CC BY, então a saída atual está correta, mas o `check_licencas` só procura "odbl"/"odc" no rótulo da fonte e não verifica o catálogo.
 6. **Export público antes do check de etapas.** `06_analysis.py --public` chama `export_public` antes de checar `q0_execucao.csv`/`puladas`; com `--parcial`, uma execução incompleta grava `data/public` e retorna 0. O guard de sha256 do §5.1 só protege um destino já existente.
 
@@ -71,7 +71,7 @@ Quando `mat_*_2025` for ausente: mostrar a matrícula `-` com "matrícula não d
 
 ### D3 — Gate: `--check` no workflow do Pages
 
-Substituir o passo de build do [.github/workflows/pages.yml](../../.github/workflows/pages.yml) por `python scripts/12_build_site.py --public data/public --out site --data-build 2026-11-06 --check`; o `--check` já constrói `site/`, e o upload usa essa saída.
+Substituir o passo de build do [.github/workflows/pages.yml](../../../.github/workflows/pages.yml) por `python scripts/12_build_site.py --public data/public --out site --data-build 2026-11-06 --check`; o `--check` já constrói `site/`, e o upload usa essa saída.
 
 **Por quê:** o §8 define os seis critérios como saída da fase; sem o gate, uma regressão publica.
 
@@ -125,12 +125,12 @@ Estender o `--check` com um caso de limite que copia `data/public` para um diret
 
 | Arquivo | Papel | Mudança |
 |---|---|---|
-| [docs/FASE-1.md](../FASE-1.md) | contrato da fase | §2 blocos 3/9; §3.1 três frases (as duas de matrícula e a de infraestrutura que já existe no código) + L-63; §5.1 coluna, licenças (`licenca`, `licenca_url`) e tamanhos; §5.2 `n_referencia`/`n: null`; §6 67/80; §7 `--check` e escopo do CI; §8 critérios 1/4/5/6 |
-| [SCHEMA.md](../../SCHEMA.md) | dicionário de dados | `censo_2024_presente`, `licenca`, `licenca_url`, `n_referencia`; vocabulário de estados/frases |
-| [data/public/README.md](../../data/public/README.md) | descrição do insumo | coluna nova; licença por família; tamanhos 60/40/13/3.7 KB |
-| [docs/LIMITES.md](../LIMITES.md) | limites | **L-63** nova (ausência de linha no Censo 2024); citar L-28 (célula vazia), L-43 e L-62 |
-| [README.md](../../README.md) | estado do projeto | atualizar a descrição do insumo se necessário |
-| [REPORT.md](../../REPORT.md) | números publicados | sem número novo; não muda |
+| [docs/FASE-1.md](../../FASE-1.md) | contrato da fase | §2 blocos 3/9; §3.1 três frases (as duas de matrícula e a de infraestrutura que já existe no código) + L-63; §5.1 coluna, licenças (`licenca`, `licenca_url`) e tamanhos; §5.2 `n_referencia`/`n: null`; §6 67/80; §7 `--check` e escopo do CI; §8 critérios 1/4/5/6 |
+| [SCHEMA.md](../../../SCHEMA.md) | dicionário de dados | `censo_2024_presente`, `licenca`, `licenca_url`, `n_referencia`; vocabulário de estados/frases |
+| [data/public/README.md](../../../data/public/README.md) | descrição do insumo | coluna nova; licença por família; tamanhos 60/40/13/3.7 KB |
+| [docs/LIMITES.md](../../LIMITES.md) | limites | **L-63** nova (ausência de linha no Censo 2024); citar L-28 (célula vazia), L-43 e L-62 |
+| [README.md](../../../README.md) | estado do projeto | atualizar a descrição do insumo se necessário |
+| [REPORT.md](../../../REPORT.md) | números publicados | sem número novo; não muda |
 
 ### 4.2 Export (`06_analysis.py`)
 
@@ -177,7 +177,7 @@ Mudanças:
 
 ### 4.4 Workflow
 
-[.github/workflows/pages.yml](../../.github/workflows/pages.yml): substituir o passo `python scripts/12_build_site.py --public data/public --out site` por `... --data-build 2026-11-06 --check`; o upload continua depois. O `--check` constrói `site/` e roda os critérios 1–4 e 6, a idempotência do 5 e o `casos_limite`; a metade do critério 5 que roda o `06` é local, porque `data/interim/` não está no repositório. O passo leva comentário dizendo isso.
+[.github/workflows/pages.yml](../../../.github/workflows/pages.yml): substituir o passo `python scripts/12_build_site.py --public data/public --out site` por `... --data-build 2026-11-06 --check`; o upload continua depois. O `--check` constrói `site/` e roda os critérios 1–4 e 6, a idempotência do 5 e o `casos_limite`; a metade do critério 5 que roda o `06` é local, porque `data/interim/` não está no repositório. O passo leva comentário dizendo isso.
 
 ### 4.5 Interfaces novas
 
@@ -207,10 +207,10 @@ FRASE_MATRICULA_2025       = "matrícula não declarada no Censo de 2025"  # L-2
 
 ### Etapa 0 — Contrato e esquema
 
-- [ ] Atualizar [docs/FASE-1.md](../FASE-1.md) §2 (blocos 3/9), §3.1 (duas frases novas, a frase de infraestrutura que já existe no código e L-63 na frase de ausência de linha), §5.1 (`censo_2024_presente`, `licenca`, `licenca_url`, tamanhos 60/40/13/3.7 KB), §5.2 (`n_referencia` condicional, `n: null`), §6 (67/80), §7 (`--check` e o escopo real do CI), §8 (critérios 1/4/5/6).
-- [ ] Atualizar [SCHEMA.md](../../SCHEMA.md) com a coluna, as licenças (`licenca`, `licenca_url`), o `n_referencia`, o vocabulário e os tamanhos.
-- [ ] Atualizar [data/public/README.md](../../data/public/README.md).
-- [ ] Em [docs/LIMITES.md](../LIMITES.md), criar **L-63** (ausência de linha no Censo 2024, com evidência e status) e citar L-28 para a célula vazia, L-43 e L-62.
+- [ ] Atualizar [docs/FASE-1.md](../../FASE-1.md) §2 (blocos 3/9), §3.1 (duas frases novas, a frase de infraestrutura que já existe no código e L-63 na frase de ausência de linha), §5.1 (`censo_2024_presente`, `licenca`, `licenca_url`, tamanhos 60/40/13/3.7 KB), §5.2 (`n_referencia` condicional, `n: null`), §6 (67/80), §7 (`--check` e o escopo real do CI), §8 (critérios 1/4/5/6).
+- [ ] Atualizar [SCHEMA.md](../../../SCHEMA.md) com a coluna, as licenças (`licenca`, `licenca_url`), o `n_referencia`, o vocabulário e os tamanhos.
+- [ ] Atualizar [data/public/README.md](../../../data/public/README.md).
+- [ ] Em [docs/LIMITES.md](../../LIMITES.md), criar **L-63** (ausência de linha no Censo 2024, com evidência e status) e citar L-28 para a célula vazia, L-43 e L-62.
 - [ ] Corrigir o `calculo` da identificação em `REGISTROS_PUBLICOS` para `Nome da escola` (o campo de 2025; `NO_ENTIDADE` era o de 2024).
 
 ### Etapa 1 — Export
@@ -233,7 +233,7 @@ FRASE_MATRICULA_2025       = "matrícula não declarada no Censo de 2025"  # L-2
 
 ### Etapa 3 — Workflow
 
-- [ ] Trocar o passo de build por `--check` no [.github/workflows/pages.yml](../../.github/workflows/pages.yml), com comentário sobre o escopo (critérios 1–4, 6, idempotência do 5; o `06` do critério 5 é local).
+- [ ] Trocar o passo de build por `--check` no [.github/workflows/pages.yml](../../../.github/workflows/pages.yml), com comentário sobre o escopo (critérios 1–4, 6, idempotência do 5; o `06` do critério 5 é local).
 - [ ] Atualizar o §7 do contrato e o §8 (critério 5 dividido entre CI e execução local).
 
 ### Etapa 4 — Verificação e documentação

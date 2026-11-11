@@ -1,14 +1,14 @@
 # Plan — home page with headline numbers, school list at `escolas.html`, and methodology page
 
 **Date:** 2026-11-11
-**Contract:** [docs/FASE-1.md](../FASE-1.md)
-**Rules:** [AGENTS.md](../../AGENTS.md)
-**Input:** [data/public/](../../data/public/) (two new parquets; three existing ones unchanged in content)
+**Contract:** [docs/FASE-1.md](../../FASE-1.md)
+**Rules:** [AGENTS.md](../../../AGENTS.md)
+**Input:** [data/public/](../../../data/public/) (two new parquets; three existing ones unchanged in content)
 **Worklog:** `docs/worklogs/2026-11-11-NN-home-e-metodologia.md` (new, Portuguese)
 **Criterion:** adds criterion **9** to FASE-1 §8; `--check` goes from nine to ten items.
 
 References below are to **modules and symbols**, not line numbers. The site build is the package
-[`scripts/sitegen/`](../../scripts/sitegen/) and `scripts/12_build_site.py` is only its CLI.
+[`scripts/sitegen/`](../../../scripts/sitegen/) and `scripts/12_build_site.py` is only its CLI.
 
 ---
 

@@ -1,9 +1,9 @@
 # Plan — table of contents (TOC) on each FASE-1 school page
 
 **Date:** 2026-11-10
-**Contract:** [docs/FASE-1.md](../FASE-1.md)
+**Contract:** [docs/FASE-1.md](../../FASE-1.md)
 **Depends on:** [plan 0 — refatorar-build-site](2026-11-10-refatorar-build-site.md) and [plan 1 — sumario-por-ra](2026-11-10-sumario-por-ra.md); both must be merged first
-**Input:** [data/public/](../../data/public/) (unchanged)
+**Input:** [data/public/](../../../data/public/) (unchanged)
 **Worklog:** `docs/worklogs/2026-11-10-03-sumario-da-escola.md` (new; Portuguese)
 **Criterion:** adds criterion **8** to FASE-1 §8; `--check` goes from eight to nine items.
 
@@ -24,7 +24,7 @@ dependency and no Jinja2, with a check in `--check` that sweeps **all** 1,291 pa
 (`render_index_page` and the RA `<select>` stay as they are). That plan left this item out on
 purpose; this document is its design.
 
-Constraints inherited from [AGENTS.md](../../AGENTS.md) and the contract:
+Constraints inherited from [AGENTS.md](../../../AGENTS.md) and the contract:
 
 - the TOC is labels only: no number, count, ranking or new data (the contract forbids ranking and
   ordering by indicator, §2);
