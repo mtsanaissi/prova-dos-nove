@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable
 
 from .edge_cases import check_edge_cases
+from .home import check_home
 from .licenses import check_licenses
 from .provenance import check_provenance
 from .ranking import check_no_ranking
@@ -75,6 +76,12 @@ CHECKS = (
         "--check-sumario-escola",
         "critério 8: sumário da página da escola",
         lambda ctx: check_school_toc(ctx.out, ctx.data),
+    ),
+    Check(
+        "home",
+        "--check-home",
+        "critério 9: números, procedência e legenda da home",
+        lambda ctx: check_home(ctx.out, ctx.data),
     ),
     Check(
         "reprodutibilidade",

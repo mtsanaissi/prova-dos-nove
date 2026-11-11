@@ -116,9 +116,9 @@ inventário, dicionário de dados e as respostas que os dados já permitem.
 CLI) e `scripts/sitegen/`.
 `06_analysis.py --public data/public` exporta o recorte versionado (1.291
 escolas, indicadores com `estado`, infraestrutura das 927 escolas de EF/EM e a
-flag `censo_2024_presente`) e o build gera `site/`: índice alfabético sem número,
-uma página por escola, a procedência de cada número em
-`site/dados/<CO_ENTIDADE>.json` e as páginas `como-ler.html` e
+flag `censo_2024_presente`) e o build gera `site/`: a lista alfabética de escolas
+sem número em `escolas.html`, uma página por escola, a procedência de cada número
+em `site/dados/<CO_ENTIDADE>.json` e as páginas `como-ler.html` e
 `creditos.html`. O workflow `.github/workflows/pages.yml` publica o resultado
 no GitHub Pages com `--check` antes do upload; antes do primeiro deploy, é
 preciso ativar Pages em "GitHub Actions" nas configurações do repositório. O
@@ -130,8 +130,23 @@ exibição, que leva à seção `#ra-<slug>` da RA escolhida, com a lista comple
 alfabética mesmo sem JavaScript (`docs/FASE-1.md` §2.1). Cada página de escola
 abre com um sumário das suas seções: `<details>` fechado por padrão e as nove
 âncoras fixas do contrato (§2.2), sem publicar número. Os dois entraram como
-critérios 7 e 8 do `--check`, que hoje roda as nove entradas do registro —
-critérios 1–8 e os casos de limite.
+critérios 7 e 8 do `--check`, que naquele momento rodava as nove entradas do
+registro — critérios 1–8 e os casos de limite.
+
+**Home e metodologia (2026-11-11).** A raiz do site passou a ser uma home com
+quatro números de destaque, um gráfico e um resumo de método: 1.291 escolas em 35
+Regiões Administrativas (L-36, L-37, L-64); 7 das 475 unidades que ofertam creche
+são da rede estadual, com 149 das 42.582 matrículas de creche, 0,3% (L-27, L-28,
+L-62, L-63); o DF é 27º de 27 no Ideb do ensino médio da rede estadual em 2025,
+3,6 contra 4,3, e era 18º em 2023 (L-10, L-32, L-66); e 499 das 927 escolas de
+ensino fundamental ou médio têm Ideb em 2025, com a ausência decomposta por
+estado do dado, nunca por causa (L-08, L-09, L-30, L-31). O gráfico compara a
+distorção idade-série das redes estadual e privada por etapa — medianas 9,0, 17,1
+e 20,7 contra 1,2, 3,2 e 4,5 (L-11, L-59, L-65, L-67). A lista de escolas mudou
+para `escolas.html`, e `metodologia.html` reúne fontes, chaves, os quatro
+estados, limites e como conferir. `data/public/` ganhou `ideb_uf.parquet` e
+`agregados.parquet`, as duas tabelas de contexto da lista fechada do `AGENTS.md`.
+O `--check` passou a rodar dez verificações, com o critério 9 para a home.
 
 Fontes baixadas e verificadas, todas com sha256 no `MANIFEST.md` (146 linhas):
 80 arquivos da SEEDF (458 MB), 53 da PDAD-A (100 MB — 50 relatórios, dois
@@ -272,7 +287,7 @@ sobre um universo restrito às escolas que ofertam fundamental/médio).
 │   │   └── inep/inbox/     # onde o arquivo baixado no navegador é deixado
 │   ├── interim/            # normalizados e respostas (fora do git)
 │   └── public/             # recorte mínimo que o build lê (dentro do git)
-├── site/                   # build estático (fora do git; ver docs/FASE-1.md)
+├── site/                   # build estático: home, escolas, metodologia e uma página por escola (fora do git)
 ├── .github/workflows/      # pages.yml: publicação do site no GitHub Pages
 └── scripts/
     ├── _common.py             # download, hash, detecção de formato, MANIFEST

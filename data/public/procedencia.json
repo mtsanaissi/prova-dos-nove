@@ -173,10 +173,105 @@
         "L-62",
         "L-63"
       ]
+    },
+    {
+      "anos": [
+        "2023",
+        "2025"
+      ],
+      "arquivo": "data/public/ideb_uf.parquet",
+      "bloco": 10,
+      "calculo": "valor observado do Ideb da UF e do Brasil, como publicado; posição = 1 + número de UFs com valor maior; denominador = UFs com valor no ano",
+      "familia": "ideb_uf",
+      "fonte": "INEP — Ideb divulgação por UF e Brasil 2023–2025",
+      "licenca": "público, sem licença declarada no portal",
+      "licenca_url": null,
+      "limites": [
+        "L-10",
+        "L-32",
+        "L-66"
+      ]
+    },
+    {
+      "anos": [
+        "2025"
+      ],
+      "arquivo": "data/public/agregados.parquet",
+      "bloco": 11,
+      "calculo": "contagem de escolas e de Regiões Administrativas distintas no cadastro",
+      "familia": "home_contagem",
+      "fonte": "SEEDF — Cadastro de Unidades Escolares 2025",
+      "licenca": "CC BY (Creative Commons Atribuição)",
+      "licenca_url": "http://www.opendefinition.org/licenses/cc-by",
+      "limites": [
+        "L-36",
+        "L-37",
+        "L-64"
+      ]
+    },
+    {
+      "anos": [
+        "2025"
+      ],
+      "arquivo": "data/public/agregados.parquet",
+      "bloco": 12,
+      "calculo": "contagem das unidades que ofertam creche e soma da matrícula em creche de 2025 por rede; a rede vem do cadastro da SEEDF",
+      "familia": "home_creche",
+      "fonte": "INEP — Censo Escolar 2024–2025",
+      "licenca": "público, sem licença declarada no portal",
+      "licenca_url": null,
+      "limites": [
+        "L-27",
+        "L-28",
+        "L-36",
+        "L-62",
+        "L-63"
+      ]
+    },
+    {
+      "anos": [
+        "2025"
+      ],
+      "arquivo": "data/public/agregados.parquet",
+      "bloco": 13,
+      "calculo": "escolas com oferta de anos iniciais, finais ou médio, decompostas por ter Ideb em 2025, ter linha de 2025 sem valor e não ter linha; pública = estadual + federal",
+      "familia": "home_ideb_cobertura",
+      "fonte": "INEP — Ideb por Escola 2025 + Censo Escolar 2025",
+      "licenca": "público, sem licença declarada no portal",
+      "licenca_url": null,
+      "limites": [
+        "L-08",
+        "L-09",
+        "L-30",
+        "L-31"
+      ]
+    },
+    {
+      "anos": [
+        "2025"
+      ],
+      "arquivo": "data/public/agregados.parquet",
+      "bloco": 14,
+      "calculo": "Percentil (interpolação linear) da distorção idade-série de 2025 entre as unidades escola × etapa da rede, com taxa publicada (estados valor e zero). Inclui unidades de turma pequena, cuja taxa a página da escola não publica (D4). Rede privada = conveniada + não conveniada. Rede federal fora.",
+      "familia": "home_tdi_rede",
+      "fonte": "INEP — Distorção Idade-Série por Escola 2025",
+      "licenca": "público, sem licença declarada no portal",
+      "licenca_url": null,
+      "limites": [
+        "L-11",
+        "L-32",
+        "L-36",
+        "L-37",
+        "L-59",
+        "L-65",
+        "L-67"
+      ]
     }
   ],
   "sha256": {
+    "agregados.parquet": "45d1cd3e870184bf8f7020f32536cd9a034cfc3d6b7a3abece57686d59be4ada",
     "escolas.parquet": "3ded32286f509826da52e29908b8ee3e172adb0c4a094d8a9fec26e21b4af2d2",
+    "ideb_uf.parquet": "d4ba11e3d1389fe8a1634c00488e489789c8230b80cce2f536b7f49fe3f2d332",
     "indicadores.parquet": "b7b6937ca5b5b1d2eeabc9ca280c517199e2a918f0227a341936f99dbc14e1cb",
     "infraestrutura.parquet": "dd53b3a8b8d9c6517e0ebce39662ab9f5ff98426186a25491eb9a0aa790bf722"
   }

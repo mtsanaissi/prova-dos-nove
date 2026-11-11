@@ -191,6 +191,108 @@ footer.rodape {
   font-size: .78rem;
 }
 footer.rodape a { color: var(--destaque); }
+.topo .menu { display: flex; gap: .9rem; font-size: .9rem; }
+.topo .menu a { text-decoration: none; font-weight: 600; }
+.topo .menu a:hover { text-decoration: underline; }
+.acoes { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1.1rem 0 .4rem; }
+.botao, .botao-secundario {
+  display: inline-block;
+  padding: .55rem .9rem;
+  border-radius: 8px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.botao { background: var(--destaque); color: var(--papel-forte); }
+.botao-secundario {
+  border: 1px solid var(--linha);
+  background: var(--papel-forte);
+  color: var(--destaque);
+}
+.botao:hover, .botao-secundario:hover { text-decoration: underline; }
+.cartoes {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin: 1.2rem 0 1.6rem;
+}
+.cartao {
+  background: var(--papel-forte);
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  box-shadow: var(--sombra);
+  padding: 1rem 1.1rem 1.1rem;
+}
+.grande-numero {
+  font-size: clamp(1.9rem, 1.3rem + 2vw, 2.6rem);
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.1;
+  margin: 0 0 .5rem;
+  font-variant-numeric: tabular-nums;
+}
+.grande-numero .num { font-weight: 700; }
+.cartao-texto { margin: 0 0 .6rem; }
+.fonte-linha {
+  color: var(--tinta-suave);
+  font-size: .75rem;
+  line-height: 1.4;
+  margin: .55rem 0 0;
+}
+.barra-ausencia {
+  display: flex;
+  height: 16px;
+  margin: .7rem 0 .5rem;
+  border: 1px solid var(--linha);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.barra-ausencia .parte { display: block; height: 100%; }
+.barra-ausencia .parte + .parte { border-left: 2px solid var(--papel-forte); }
+.parte-com-valor { background: #245c4a; }
+.parte-publica-linha { background: #6d8a7c; }
+.parte-publica-sem-linha { background: #a8b8ae; }
+.parte-privada-linha { background: #cfc7b4; }
+.parte-privada-sem-linha { background: #e8e3d8; }
+.legenda-ausencia {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 .5rem;
+  color: var(--tinta-suave);
+  font-size: .8rem;
+}
+.legenda-ausencia li { padding: .1rem 0; }
+.grafico-rede {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: .4rem 0 .6rem;
+}
+.grafico-rede .grade { stroke: var(--linha); stroke-width: 1; }
+.grafico-rede .eixo, .grafico-rede .eixo-titulo { fill: var(--tinta-suave); font-size: 9px; }
+.grafico-rede .rotulo-grupo { fill: var(--tinta); font-size: 12px; font-weight: 600; }
+.grafico-rede .rotulo-rede { fill: var(--tinta-suave); font-size: 11px; }
+.grafico-rede .faixa-estadual { fill: #7d8a93; }
+.grafico-rede .faixa-privada { fill: #d3cec2; }
+.grafico-rede .mediana { stroke: var(--tinta); stroke-width: 2; }
+.grafico-rede .valor-ponta { fill: var(--tinta); font-size: 10.5px; }
+.grafico-rede .valor-ponta .valor { font-weight: 600; }
+.tabela-dados { margin: .6rem 0 0; }
+.tabela-dados summary {
+  cursor: pointer;
+  font-size: .85rem;
+  color: var(--destaque);
+  font-weight: 600;
+}
+.tabela-dados summary:focus-visible { outline: 2px solid var(--destaque); outline-offset: 1px; }
+.legenda-rede {
+  color: var(--tinta-suave);
+  font-size: .8rem;
+  line-height: 1.5;
+  margin: .8rem 0 0;
+}
+@media (min-width: 40rem) {
+  .cartoes { grid-template-columns: 1fr 1fr; }
+}
 @media (max-width: 38rem) {
   .ficha { grid-template-columns: 1fr; gap: 0; }
   .ficha dt { margin-top: .35rem; }

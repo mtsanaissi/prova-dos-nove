@@ -1,12 +1,13 @@
 """Build do site estático da Prova dos Nove (fase 1 de `docs/FASE-1.md`).
 
 Entrada: `data/public/` (`escolas.parquet`, `indicadores.parquet`,
-         `infraestrutura.parquet` e `procedencia.json`), gerado por
-         `06_analysis.py --public data/public`.
-Saída:   `site/index.html`, `site/indice.json`, `site/estilo.css`,
+         `infraestrutura.parquet`, `ideb_uf.parquet`, `agregados.parquet` e
+         `procedencia.json`), gerado por `06_analysis.py --public data/public`.
+Saída:   `site/index.html` (home), `site/escolas.html` (lista de escolas),
+         `site/metodologia.html`, `site/indice.json`, `site/estilo.css`,
          `site/creditos.html`, `site/como-ler.html`, uma página por escola
          (`site/<CO_ENTIDADE>.html`) e a procedência de cada número
-         (`site/dados/<CO_ENTIDADE>.json`).
+         (`site/dados/<CO_ENTIDADE>.json` e `site/dados/home.json`).
 Idempotente: sim — o build não chama `datetime.now()`, itera em ordem fixa e
 usa `--data-build` como único carimbo de tempo.
 
@@ -20,6 +21,7 @@ Uso:
     python scripts/12_build_site.py --public data/public --out site \
         --data-build 2026-11-06 --limiar-n 30
     python scripts/12_build_site.py --public data/public --out site --check
+    python scripts/12_build_site.py --public data/public --out site --check-home
     python scripts/12_build_site.py --public data/public --out site --check-sumario-escola
     python scripts/12_build_site.py --public data/public --out site --check-casos
 """

@@ -79,6 +79,26 @@ IDEB_YEARS_BY_STAGE = {"AI": IDEB_YEARS, "AF": IDEB_YEARS, "EM": ["2017", "2019"
 NETWORKS = {"federal", "estadual", "privada conveniada", "privada não conveniada"}
 
 
+IDEB_UF_NETWORKS = {"Total", "Pública", "Estadual", "Privada"}
+
+
+# Faixa comum do gráfico de distorção da home: maior p90 arredondado para cima
+# em múltiplo de 10 (hoje 35,8 → 40).
+CHART_CEILING_STEP = 10
+
+
+PHRASE_HOME_NETWORK_COMPARISON = (
+    "Compara redes, não escolas. A página de cada escola não traz média de rede porque "
+    "comparar escolas premia quem já partiu na frente (D3); aqui a pergunta é de política "
+    "pública. O gráfico não controla o perfil socioeconômico dos alunos (L-65): ele mostra "
+    "que as redes atendem públicos diferentes, não que uma escola reduz a distorção. A rede "
+    "privada reúne escolas conveniadas e não conveniadas (L-36, L-37). Entram todas as "
+    "escolas com taxa publicada, inclusive as de turma pequena, cuja taxa a página da escola "
+    "não mostra (L-67). A rede federal (1 escola nos anos finais, 11 no médio) fica fora por "
+    "n pequeno (L-32)."
+)
+
+
 STATES = {"valor", "zero", "ausente", "nao_aplicavel"}
 
 

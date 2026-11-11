@@ -1,6 +1,6 @@
 """Leitura e validação de `data/public/`.
 
-Entrada: diretório público com os três parquets e `procedencia.json`.
+Entrada: diretório público com os cinco parquets e `procedencia.json`.
 Saída: o modelo em memória usado por todas as páginas e pelos checks.
 Idempotente: sim — só lê e confere sha256."""
 
@@ -13,7 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 from .errors import BuildError
-from .contract import NETWORKS, STAGES, STAGE_LABEL, STATES, ENROLLMENT_COLUMNS, OFFERINGS
+from .contract import NETWORKS, STAGES, STAGE_LABEL, STATES, ENROLLMENT_COLUMNS, OFFERINGS, IDEB_UF_NETWORKS
 
 
 def sha256(path: Path) -> str:
@@ -61,7 +61,15 @@ def load_data(public: Path) -> dict:
     public = Path(public)
     if not public.is_dir():
         raise BuildError(f"data/public não existe: {public} (rode 06_analysis.py --public)")
-    for name in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet", "procedencia.json"):
+    files = (
+        "escolas.parquet",
+        "indicadores.parquet",
+        "infraestrutura.parquet",
+        "ideb_uf.parquet",
+        "agregados.parquet",
+        "procedencia.json",
+    )
+    for name in files:
         if not (public / name).is_file():
             raise BuildError(f"falta {public / name} (rode 06_analysis.py --public)")
 
@@ -69,7 +77,9 @@ def load_data(public: Path) -> dict:
     hashes = provenance.get("sha256")
     if not isinstance(hashes, dict):
         raise BuildError("procedencia.json sem o mapa 'sha256' dos parquets")
-    for name in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet"):
+    for name in files:
+        if name == "procedencia.json":
+            continue
         if not hashes.get(name):
             raise BuildError(f"procedencia.json sem sha256 de {name}")
         actual = sha256(public / name)
@@ -172,6 +182,70 @@ def load_data(public: Path) -> dict:
             raise BuildError(f"infraestrutura {code}/{item} com valor fora de 0/1: {value!r}")
         infra[(code, item)] = {"valor": value, "estado": state, "ano": str(r["ano"])}
 
+    table = {}
+    table_df = pd.read_parquet(public / "ideb_uf.parquet")
+    for column in (
+        "etapa", "ano", "rede", "df", "df_estado",
+        "brasil", "brasil_estado", "posicao", "n_ufs",
+    ):
+        if column not in table_df:
+            raise BuildError(f"ideb_uf.parquet sem a coluna {column}")
+    for r in table_df.to_dict("records"):
+        stage = str(r["etapa"])
+        year = str(r["ano"])
+        network = str(r["rede"])
+        if stage not in STAGE_LABEL:
+            raise BuildError(f"ideb_uf com etapa fora do contrato: {stage!r}")
+        if year not in ("2023", "2025"):
+            raise BuildError(f"ideb_uf com ano fora do contrato: {year!r}")
+        if network not in IDEB_UF_NETWORKS:
+            raise BuildError(f"ideb_uf com rede fora do contrato: {network!r}")
+        entry = {"posicao": _int_or_none(r["posicao"]), "n_ufs": _int_or_none(r["n_ufs"])}
+        for field, state_field in (("df", "df_estado"), ("brasil", "brasil_estado")):
+            state = str(r[state_field])
+            if state not in ("valor", "ausente"):
+                raise BuildError(f"ideb_uf {stage}/{year}/{network}: {state_field} {state!r}")
+            value = None if pd.isna(r[field]) else float(r[field])
+            if (state == "valor") != (value is not None):
+                raise BuildError(
+                    f"ideb_uf {stage}/{year}/{network}: {field} não casa com {state_field}"
+                )
+            entry[field] = value
+            entry[state_field] = state
+        key = (stage, year, network)
+        if key in table:
+            raise BuildError(f"ideb_uf duplicado: {key}")
+        table[key] = entry
+
+    agregados = {}
+    agregados_df = pd.read_parquet(public / "agregados.parquet")
+    for column in ("id", "bloco", "grupo", "etapa", "ano", "metrica", "valor", "n", "estado"):
+        if column not in agregados_df:
+            raise BuildError(f"agregados.parquet sem a coluna {column}")
+    for r in agregados_df.to_dict("records"):
+        identifier = str(r["id"]).strip()
+        if not identifier:
+            raise BuildError("agregados.parquet com id vazio")
+        if identifier in agregados:
+            raise BuildError(f"agregados.parquet com id duplicado: {identifier}")
+        state = str(r["estado"])
+        if state not in ("valor", "ausente"):
+            raise BuildError(f"agregado {identifier} com estado fora do contrato: {state!r}")
+        value = None if pd.isna(r["valor"]) else float(r["valor"])
+        if (state == "valor") != (value is not None):
+            raise BuildError(f"agregado {identifier}: valor não casa com o estado {state}")
+        agregados[identifier] = {
+            "id": identifier,
+            "bloco": str(r["bloco"]),
+            "grupo": str(r["grupo"]),
+            "etapa": str(r["etapa"]),
+            "ano": str(r["ano"]),
+            "metrica": str(r["metrica"]),
+            "valor": value,
+            "n": _int_or_none(r["n"]),
+            "estado": state,
+        }
+
     execution = provenance.get("execucao") or {}
     skipped_steps = execution.get("etapas_puladas") if isinstance(execution, dict) else None
     if skipped_steps is None:
@@ -189,6 +263,8 @@ def load_data(public: Path) -> dict:
         "por_co": by_code,
         "indicadores": indicators,
         "infra": infra,
+        "ideb_uf": table,
+        "agregados": agregados,
         "procedencia": provenance,
         "registros": _records_by_family(provenance),
         "hashes": hashes,

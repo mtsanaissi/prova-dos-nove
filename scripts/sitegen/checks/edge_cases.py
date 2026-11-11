@@ -32,7 +32,10 @@ def check_edge_cases(public: Path, data_build: str) -> str:
     columns_2024 = ["mat_inf_cre_2024", "mat_fund_ai_2024", "mat_fund_af_2024", "mat_med_2024"]
     with tempfile.TemporaryDirectory(prefix="prova-dos-nove-casos-", dir=temp_base) as tmp:
         tmp = Path(tmp)
-        for name in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet", "procedencia.json"):
+        for name in (
+            "escolas.parquet", "indicadores.parquet", "infraestrutura.parquet",
+            "ideb_uf.parquet", "agregados.parquet", "procedencia.json",
+        ):
             shutil.copy2(public / name, tmp / name)
 
         schools = pd.read_parquet(tmp / "escolas.parquet")

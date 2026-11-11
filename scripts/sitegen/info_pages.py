@@ -170,7 +170,9 @@ desta versão. A matrícula publicada vem do Censo da INEP (L-62).</p>
 <h2>Este build</h2>
 <p>Data do build: <strong>{html.escape(data_build)}</strong>.</p>
 <p>Limiar de n pequeno usado neste build: <strong>{threshold}</strong>.</p>
-<p><a href="como-ler.html">Como ler os números</a> · <a href="index.html">Todas as escolas</a>.</p>
+<p><a href="como-ler.html">Como ler os números</a> ·
+<a href="escolas.html">Todas as escolas</a> ·
+<a href="metodologia.html">Metodologia</a>.</p>
 </section>
 </main>
 """

@@ -619,22 +619,27 @@ Censo declara matrícula maior que zero: a divergência fica visível em
 `oferta_seedf`, não resolvida. Indicador sem linha para uma etapa ofertada entra
 como `ausente`; o estado que veio da fonte é copiado como está (L-59).
 
-## Insumo publicado do site (`data/public/`, 2026-11-09)
+## Insumo publicado do site (`data/public/`, 2026-11-11)
 
-Quatro arquivos gerados por `scripts/06_analysis.py --public data/public` a
-partir de `data/interim/`; nenhum tem microdado ou linha de aluno. O build
+Seis arquivos gerados por `scripts/06_analysis.py --public data/public` a partir
+de `data/interim/`; nenhum tem microdado ou linha de aluno. O build
 `scripts/12_build_site.py` lê **só** esta pasta e confere o sha256 registrado em
-`procedencia.json`.
+`procedencia.json`. Três arquivos são por escola e dois são tabelas de contexto,
+na lista fechada do `AGENTS.md` (tabela nova ali exige emenda lá).
 
 | arquivo | grão | colunas | regra |
 |---|---|---|---|
 | `escolas.parquet` | escola (1.291) | `co_entidade`, `nome`, `ra`, `rede`, `rede_cadastro`, `censo_2024_presente`, `oferta_inf_cre`…`oferta_prof` (8 flags), `mat_inf_cre_2024`…`mat_med_2025` (8 matrículas) | `ra` normalizada por `norm_ra`; `rede` é a categoria do site (`federal`, `estadual`, `privada conveniada`, `privada não conveniada`) e `rede_cadastro` guarda o `Nome Rede` original. `censo_2024_presente` é `True` quando o `CO_ENTIDADE` tem linha no Censo 2024 e `False` quando não tem: as 53 escolas de 2025 sem linha ficam com a flag `False` e as quatro matrículas de 2024 nulas; as 3 com linha e células vazias ficam com a flag `True` e as células nulas (L-28, L-63). Matrícula vem do Censo 2024–2025, nunca da série ODbL da SEEDF (L-62) |
 | `indicadores.parquet` | escola × etapa × indicador × ano | `co_entidade`, `etapa` (`AI`/`AF`/`EM`), `indicador` (`ideb_observado`, `tdi`, `tnr`, `aprovacao`, `reprovacao`, `abandono`), `ano`, `valor`, `estado` | só `FUN_AI`, `FUN_AF` e `MED`; `ideb_projetado` fica fora; `estado` é copiado da fonte e nunca deduzido de `NaN` (L-59) |
 | `infraestrutura.parquet` | escola × item (8 itens) | `co_entidade`, `item`, `ano`, `valor` (0/1), `estado` | universo das 927 escolas que oferecem ensino fundamental ou médio; não há linha para as demais, e a página mostra o bloco como `nao_aplicavel` (L-25) |
-| `procedencia.json` | família de indicador | `familia`, `bloco`, `fonte`, `arquivo`, `anos`, `calculo`, `limites`, `licenca`, `licenca_url`; topo com `sha256` dos três parquets e `execucao.etapas_puladas` | uma família por bloco do contrato; o build usa fonte, limites e licença daqui. A licença SEEDF vem de `license_title`/`license_url` do conjunto no inventário do CKAN; a INEP declara "público, sem licença declarada no portal", com URL nula. O export falha antes de gravar se uma família SEEDF resolver para ODbL (L-62). `execucao.etapas_puladas` é vazio na execução completa e só é preenchido com `--parcial` |
+| `ideb_uf.parquet` | etapa × ano × rede (24 linhas) | `etapa` (`AI`/`AF`/`EM`), `ano` (`2023`, `2025`), `rede` (`Total`, `Pública`, `Estadual`, `Privada`), `df`, `df_estado`, `brasil`, `brasil_estado`, `posicao` (`Int64`), `n_ufs` (`Int64`) | tabela de contexto, de território (UF) e não de escola. `df`/`brasil` são o Ideb observado como publicado; `*_estado` é `valor` ou `ausente` e casa com a presença do número. `posicao = 1 + número de UFs com valor maior` e `n_ufs` é o número de UFs com valor no ano — os dois vêm nulos quando a UF não tem valor (EM/Pública, L-10). Derivada de `_ideb_uf_tabela()`, a mesma de `q8_df_brasil_uf.csv`; `df_menos_brasil` e `mediana_ufs` ficam fora (derivados, o site não usa) |
+| `agregados.parquet` | id do número da home (40 linhas) | `id` (str, único), `bloco` (`contagem`, `creche`, `ausencia`, `tdi`), `grupo` (`todas`, `estadual`, `publica`, `privada`), `etapa`, `ano`, `metrica` (`escolas`, `ras`, `unidades`, `matriculas`, `percentual`, `p10`, `mediana`, `p90`), `valor` (float, 4 decimais), `n` (`Int64`), `estado` | tabela de contexto, derivada dos dois arquivos por escola na mesma execução — nunca de `data/interim/`. `valor` é quantizado a 4 decimais: 8,95 fica 8,95 e 149/42.582 × 100 fica 0,3499 (que a home mostra como 0,3%). `n` é o denominador da métrica (unidades escola × etapa nos percentis, matrículas na porcentagem da creche) e é nulo quando o valor já é a contagem. A distribuição de distorção usa os estados `valor` e `zero` e **não** aplica o limiar de n, por decisão declarada em `docs/LIMITES.md` L-67; `nao_aplicavel` e `ausente` ficam fora. Grupo `privada` = `privada conveniada` + `privada não conveniada` (L-36, L-37); `federal` não entra na distribuição (L-32). "com valor" no bloco `ausencia` olha só as etapas ofertadas da escola |
+| `procedencia.json` | família de indicador (14 famílias) | `familia`, `bloco`, `fonte`, `arquivo`, `anos`, `calculo`, `limites`, `licenca`, `licenca_url`; topo com `sha256` dos cinco parquets e `execucao.etapas_puladas` | uma família por bloco do contrato; o build usa fonte, limites e licença daqui. A licença SEEDF vem de `license_title`/`license_url` do conjunto no inventário do CKAN; a INEP declara "público, sem licença declarada no portal", com URL nula. O export falha antes de gravar se uma família SEEDF resolver para ODbL (L-62). `execucao.etapas_puladas` é vazio na execução completa e só é preenchido com `--parcial` |
 
-Tamanhos medidos em 2026-11-09: `escolas.parquet` 61 KB, `indicadores.parquet`
-40 KB, `infraestrutura.parquet` 13 KB e `procedencia.json` 4.7 KB.
+Tamanhos medidos em 2026-11-11: `escolas.parquet` 61.846 B,
+`indicadores.parquet` 40.420 B, `infraestrutura.parquet` 12.289 B,
+`ideb_uf.parquet` 5.653 B, `agregados.parquet` 6.030 B e `procedencia.json`
+7.964 B.
 
 No `site/dados/<CO_ENTIDADE>.json`, cada número traz `n` inteiro ou `null`.
 `n = null` ocorre quando a matrícula que serviria de denominador não existe

@@ -21,11 +21,17 @@ def document(title: str, body: str, data_build: str, threshold: int, head_extra:
 <body>
 <header class="topo">
   <a class="marca" href="index.html">Prova dos Nove</a>
+  <nav class="menu" aria-label="Páginas do site">
+    <a href="escolas.html">Escolas</a>
+    <a href="metodologia.html">Metodologia</a>
+  </nav>
   <p class="carimbo">build {html.escape(data_build)} · limiar de n pequeno = {threshold}</p>
 </header>
 {body}
 <footer class="rodape">
   <p>Prova dos Nove · dados públicos de educação, com fonte, ano e cálculo.
+  <a href="escolas.html">Escolas</a> ·
+  <a href="metodologia.html">Metodologia</a> ·
   <a href="como-ler.html">Como ler os números</a> ·
   <a href="creditos.html">Créditos e licenças</a>.</p>
 </footer>

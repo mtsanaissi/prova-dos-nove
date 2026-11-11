@@ -89,10 +89,11 @@ Regras que valem para todos os blocos:
 - Cada número carrega, no JSON de procedência (§5), fonte, arquivo, ano, cálculo,
   n e ids.
 
-### 2.1 A página de entrada (`index.html`)
+### 2.1 A lista de escolas (`escolas.html`)
 
-A porta do site (decisão do mantenedor, 2026-11-06). Três formas de chegar, na
-mesma página:
+A lista de todas as escolas, com três formas de chegar na mesma página (decisão
+do mantenedor, 2026-11-06; desde 2026-11-11 ela fica em `escolas.html`, e a raiz
+do site passou a ser a home do §2.3). Três formas de chegar, na mesma página:
 
 - **busca por nome**: campo que filtra enquanto se digita, sem servidor, lendo
   `indice.json` no navegador;
@@ -111,15 +112,16 @@ mantêm o valor bruto do cadastro (`AGUAS CLARAS`, `CEILANDIA`,
 
 Regras:
 
-- O índice **não publica número**: nem contagem de escolas por RA, nem média,
+- A lista **não publica número**: nem contagem de escolas por RA, nem média,
   nem total. Número é coisa da página da escola, onde a procedência aparece
   número a número. Se a contagem for pedida depois, entra com bloco de fonte
   próprio.
 - Nenhuma ordenação por indicador; a ordem é alfabética em todos os níveis.
 - Sem JavaScript a lista por RA continua legível: o HTML é gerado com as 1.291
   escolas; o JavaScript filtra e salta. O `<select>` fica escondido sem
-  JavaScript (`<noscript><style>` no `<head>` do índice) e o aviso do corpo diz
-  que busca e salto precisam de JavaScript, com a lista completa logo abaixo.
+  JavaScript (`<noscript><style>` no `<head>` de `escolas.html`) e o aviso do
+  corpo diz que busca e salto precisam de JavaScript, com a lista completa logo
+  abaixo.
 - `indice.json` é `[{co_entidade, nome, ra, rede}]`, ordenado por `nome`, e é o
   único insumo da busca.
 
@@ -156,6 +158,85 @@ Regras:
   (`school_page.SCHOOL_SECTIONS`); o `--check` compara o HTML com uma cópia
   congelada do contrato (`checks/school_toc.py`), para que renomear um id quebre o
   build.
+
+### 2.3 A home (`index.html`)
+
+A raiz do site passou a ser a home (decisão do mantenedor, 2026-11-11). Ela
+publica número — é o único lugar, junto da página da escola, onde isso acontece —
+e por isso cada número visível é um `data-numero` com registro em
+`site/dados/home.json`, com o mesmo formato do registro da página da escola
+(`fonte`, `arquivo`, `ano`, `calculo`, `estado`, `n`, `limites`), e é conferido
+pelo critério 9.
+
+O conteúdo é fixo, nesta ordem:
+
+1. **Cabeçalho e chamada**: o nome do projeto, uma frase sobre o que ele é, e os
+   dois links de entrada (`escolas.html` e `metodologia.html`).
+2. **Quatro cartões**, cada um com `data-cartao` (o critério 9 conta quatro), o
+   número grande, o texto e uma linha de fonte com ano e limites. Sem seta de
+   variação e sem cor de bom/ruim:
+   - `escolas-total` e `ras-total`: escolas e Regiões Administrativas do
+     cadastro SEEDF de 2025 (L-36, L-37, L-64);
+   - `creche-unidades-estadual`, `creche-unidades-total`, `creche-mat-estadual`,
+     `creche-mat-total` e `creche-mat-estadual-pct`: unidades que ofertam creche
+     e a matrícula delas por rede, do Censo (L-27, L-28, L-36, L-62, L-63);
+   - `ideb-uf-em-2025-estadual-*` e `ideb-uf-em-2023-estadual-*`: posição e valor
+     do DF no Ideb do ensino médio da rede estadual, contra o Brasil e contra
+     2023 (L-10, L-32, L-66);
+   - `ideb-*`: cobertura do Ideb em 2025 no universo de escolas com anos
+     iniciais, finais ou médio, decomposta por estado do dado — com Ideb, com
+     linha e sem valor, sem linha — e por rede (L-08, L-09, L-30, L-31).
+3. **Gráfico de distorção idade-série por rede**: mediana e faixa central de 80%
+   das escolas, por etapa, em SVG inline (sem JavaScript), com uma tabela
+   equivalente em `<details>` e a legenda de rede obrigatória
+   (`contract.PHRASE_HOME_NETWORK_COMPARISON`), que cita L-65, L-67, L-36, L-37 e
+   L-32. A comparação entre redes existe só aqui: D3 continua valendo na página
+   da escola e na lista, e o escopo está no critério 2 do §8.
+4. **Motivação** em três parágrafos, com os mesmos ids do cartão do Ideb e o
+   `ideb-uf-ai-2025-total-posicao` da linha Total dos anos iniciais.
+5. **Resumo de método** em quatro blocos, com link para `metodologia.html`.
+
+Regras da home:
+
+- Número só aparece em `data-numero`; o texto não digita número de dado. O único
+  número fora de `data-numero` é o limiar de n, que vem de `--limiar-n` e já
+  aparece no carimbo de todas as páginas.
+- A decomposição da ausência de Ideb é por **estado do dado**, nunca por causa:
+  a fonte não separa não participação, participação abaixo do critério e
+  resultado não publicado (L-09), e a regra de participação entra como explicação
+  possível de parte dos casos (L-30), nunca como causa por escola.
+- Zero, ausente e não aplicável continuam distintos; linha com o Ideb ausente
+  (`df_estado = "ausente"`) nunca é renderizada como número.
+- Nada de seta de variação, cor de juízo ou link para página de escola: a home
+  não é ranking nem índice.
+- A distribuição entre redes usa **todos** os valores publicados, inclusive as
+  unidades de turma pequena que a página da escola suprime (L-67), e por isso a
+  mediana da home é a mesma de `README.md` e `REPORT.md`.
+- Percentual e percentil mostram **um decimal, com arredondamento half-up sobre a
+  string decimal** (`fmt_pct`): 8,95 → 9,0; 4,05 → 4,1; 0,3499 → 0,3. As páginas
+  de escola continuam com `fmt_dec`.
+
+### 2.4 A metodologia (`metodologia.html`)
+
+Página de método para quem audita, separada de `como-ler.html`, que continua
+sendo o guia do leitor de um número (os 1.291 links de âncora das páginas de
+escola apontam para lá e não mudaram). Oito seções, cada uma com `id` e
+`class="bloco"`:
+
+| # | id | assunto |
+|---|---|---|
+| 1 | `fontes` | tabela de fonte, o que é usado, ano e portal oficial |
+| 2 | `entrada` | download → `MANIFEST.md` → perfil → `SCHEMA.md`, com o caminho manual declarado da INEP (L-16) |
+| 3 | `chaves` | taxa de casamento medida antes de cada join (L-55); a série da SEEDF é republicação (L-07) e a de matrículas diverge do Censo (L-01) |
+| 4 | `estados` | os quatro estados, com link para `como-ler.html` |
+| 5 | `escola` | o que a página da escola mostra e não mostra (D3, D4, sem ranking, sem média de rede) |
+| 6 | `redes` | por que a home compara redes, L-65, L-67 e "privada" = conveniada + não conveniada |
+| 7 | `conferir` | `dados/<código>.json`, `dados/home.json`, sha256 do insumo, build determinístico, `--check` |
+| 8 | `limites` | links para `docs/LIMITES.md`, `REPORT.md`, `SCHEMA.md`, `README.md` e o repositório |
+
+A página **não publica número de dado**: contagem de arquivos e de limites
+envelhece na semana seguinte. O único número que vem do build é o limiar de n,
+lido de `--limiar-n`.
 
 ## 3. Contrato de dados
 
@@ -238,14 +319,18 @@ nenhum Ideb e nenhuma taxa. A página mostra a oferta e diz o que falta.
 ### 5.1 Insumo versionado: `data/public/`
 
 `06_analysis.py --public data/public` exporta, de `data/interim/`, o recorte que
-o build lê. Quatro arquivos, nenhum com microdado, nenhum com linha de aluno:
+o build lê. Seis arquivos, nenhum com microdado, nenhum com linha de aluno: três
+por escola e dois de contexto, na lista fechada do `AGENTS.md` (tabela nova ali
+exige emenda lá).
 
 | arquivo | grão | colunas | tamanho medido |
 |---|---|---|---|
-| `escolas.parquet` | escola (1.291) | `co_entidade`, `nome`, `ra`, `rede`, `rede_cadastro`, `censo_2024_presente`, `oferta_inf_cre`…`oferta_prof` (8 flags), `mat_inf_cre_2024`, `mat_fund_ai_2024`, `mat_fund_af_2024`, `mat_med_2024` e as quatro de 2025 | 61 KB |
-| `indicadores.parquet` | escola × etapa × indicador × ano | `co_entidade`, `etapa` (`AI`/`AF`/`EM`), `indicador` (`ideb_observado`, `tdi`, `tnr`, `aprovacao`, `reprovacao`, `abandono`), `ano`, `valor`, `estado` | 40 KB |
-| `infraestrutura.parquet` | escola × item (8 itens do §2) | `co_entidade`, `item` (nome da coluna `IN_*`), `ano` (2025), `valor` (0/1), `estado` | 13 KB |
-| `procedencia.json` | um registro por indicador/família | `fonte`, `arquivo`, `anos`, `calculo`, `limites`, `licenca`, `licenca_url`; topo com `sha256` dos três parquets e `execucao.etapas_puladas` | 4.7 KB |
+| `escolas.parquet` | escola (1.291) | `co_entidade`, `nome`, `ra`, `rede`, `rede_cadastro`, `censo_2024_presente`, `oferta_inf_cre`…`oferta_prof` (8 flags), `mat_inf_cre_2024`, `mat_fund_ai_2024`, `mat_fund_af_2024`, `mat_med_2024` e as quatro de 2025 | 61.846 B |
+| `indicadores.parquet` | escola × etapa × indicador × ano | `co_entidade`, `etapa` (`AI`/`AF`/`EM`), `indicador` (`ideb_observado`, `tdi`, `tnr`, `aprovacao`, `reprovacao`, `abandono`), `ano`, `valor`, `estado` | 40.420 B |
+| `infraestrutura.parquet` | escola × item (8 itens do §2) | `co_entidade`, `item` (nome da coluna `IN_*`), `ano` (2025), `valor` (0/1), `estado` | 12.289 B |
+| `ideb_uf.parquet` | etapa × ano × rede (24 linhas, 2023 e 2025) | `etapa`, `ano`, `rede` (`Total`/`Pública`/`Estadual`/`Privada`), `df`, `df_estado`, `brasil`, `brasil_estado`, `posicao`, `n_ufs` | 5.653 B |
+| `agregados.parquet` | id do número da home (40 linhas) | `id`, `bloco` (`contagem`/`creche`/`ausencia`/`tdi`), `grupo`, `etapa`, `ano`, `metrica`, `valor`, `n`, `estado` | 6.030 B |
+| `procedencia.json` | um registro por indicador/família (14 famílias) | `fonte`, `arquivo`, `anos`, `calculo`, `limites`, `licenca`, `licenca_url`; topo com `sha256` dos cinco parquets e `execucao.etapas_puladas` | 7.964 B |
 
 Regras do export, todas verificáveis:
 
@@ -271,18 +356,34 @@ Regras do export, todas verificáveis:
 - O export falha se `data/public/` já existir com `sha256` diferente do que vai
   gravar e o `--force` não for passado: mudança no insumo aparece no diff.
 - `data/public/` é gerado e **commitado** (exceção declarada em `AGENTS.md`).
+- `ideb_uf.parquet` e `agregados.parquet` são as duas tabelas de contexto da lista
+  fechada: a primeira é de território (UF), não de escola; a segunda é derivada
+  dos arquivos por escola, na mesma execução. As duas existem para a home e
+  nenhuma página de escola as lê.
+- `agregados.parquet` não aplica o limiar de n: a distribuição de distorção inclui
+  as unidades de turma pequena, e a diferença em relação à página da escola é
+  declarada em L-67. Filtrar pelo limiar exigiria o valor da flag dentro do
+  export e faria a home discordar de `README.md` e `REPORT.md`.
+- `valor` de `agregados.parquet` é quantizado a 4 decimais; `n` é `Int64` e
+  significa o denominador da métrica (unidades, matrículas), `null` quando o
+  valor já é a contagem. O texto de exibição é responsabilidade da home
+  (`fmt_int` para contagem, `fmt_pct` para percentual e percentil).
 
 ### 5.2 Saída: `site/`
 
 ```text
 site/
-├── index.html                     # busca por nome + salto por RA + lista por RA, sem número (§2.1)
-├── indice.json                    # [{co_entidade, nome, ra, rede}] — alimenta a busca
+├── index.html                     # home: motivação, quatro cartões, gráfico por rede e resumo de método (§2.3)
+├── escolas.html                   # busca por nome + salto por RA + lista por RA, sem número (§2.1)
+├── metodologia.html               # fontes, tratamento, limites e como conferir (§2.4)
+├── indice.json                    # [{co_entidade, nome, ra, rede}] — alimenta a busca de escolas.html
 ├── estilo.css                     # sem framework
 ├── creditos.html                  # licença por fonte e titular (critério 6)
 ├── como-ler.html                  # estados, ausências e limiar de n, explicados uma vez
 ├── <CO_ENTIDADE>.html             # uma página por escola (1.291), com o sumário das seções (§2.2)
-└── dados/<CO_ENTIDADE>.json       # procedência de cada número daquela página
+└── dados/
+    ├── <CO_ENTIDADE>.json         # procedência de cada número daquela página
+    └── home.json                  # procedência de cada número da home (§2.3)
 ```
 
 Formato do `dados/<CO_ENTIDADE>.json`:
@@ -311,6 +412,34 @@ Formato do `dados/<CO_ENTIDADE>.json`:
 
 O `id` é obrigatório e único na página: é o valor do `data-numero` do HTML, e o
 `--check` falha quando um número visível não tem entrada (§8, critério 1).
+
+`dados/home.json` tem a mesma lista, com dois campos a mais no topo:
+
+```json
+{
+  "pagina": "home",
+  "gerado_em": "2026-11-06",
+  "numeros": [
+    {
+      "id": "tdi-ai-estadual-mediana",
+      "bloco": "tdi",
+      "etapa": "anos iniciais",
+      "ano": "2025",
+      "valor": 8.95,
+      "estado": "valor",
+      "fonte": "INEP — Distorção Idade-Série por Escola 2025",
+      "arquivo": "data/public/agregados.parquet",
+      "calculo": "Percentil (interpolação linear) da distorção idade-série de 2025 …",
+      "n": 386,
+      "limites": ["L-11", "L-32", "L-36", "L-37", "L-59", "L-65", "L-67"]
+    }
+  ]
+}
+```
+
+O mesmo `id` pode aparecer mais de uma vez no HTML (o cartão e a motivação, o
+gráfico e a tabela), mas entra **uma vez** no JSON; repetição com valor ou estado
+diferente interrompe o build. O critério 9 confere a lista inteira.
 
 Onde `n` sai: é a matrícula da etapa de 2025 em `escolas.parquet`; `q16`
 (`data/interim/q16_presenca_escola_etapa.csv`) é o artefato que prova a conta, não
@@ -343,11 +472,12 @@ python scripts/12_build_site.py --public data/public --out site \
 ```
 
 O build vive em `scripts/sitegen/`; `scripts/12_build_site.py` é a CLI e mantém
-o comando acima. O `--check` roda as nove verificações na ordem do registro
+o comando acima. O `--check` roda as dez verificações na ordem do registro
 (`procedencia`, `ranking`, `sumario`, `limiar`, `estados`, `sumario_escola`,
-`reprodutibilidade`, `licencas`, `casos_limite`) e para no primeiro que falhar.
-A ordem documentada é a de `CHECKS`, em `scripts/sitegen/checks/__init__.py`, e
-cada verificação com flag tem o seu `--check-*` (`--check-casos` é a nona).
+`home`, `reprodutibilidade`, `licencas`, `casos_limite`) e para no primeiro que
+falhar. A ordem documentada é a de `CHECKS`, em
+`scripts/sitegen/checks/__init__.py`, e cada verificação com flag tem o seu
+`--check-*` (`--check-casos` é a décima).
 
 - Sem dependência nova: só `pandas` e `pyarrow` (já em `requirements.txt`) e
   HTML montado por f-string. O ambiente de CI instala apenas o `requirements.txt`;
@@ -443,11 +573,12 @@ jobs:
 ```
 
 Antes do primeiro deploy: ativar Pages em "GitHub Actions" nas configurações do
-repo. Tamanho: 1.291 páginas + o JSON por escola; o limite de site publicado é
-1 GB, e o build mede o total e falha se passar de 700 MB.
+repo. Tamanho: 1.291 páginas + o JSON por escola + a home, a lista e a
+metodologia; o limite de site publicado é 1 GB, e o build mede o total e falha se
+passar de 700 MB.
 
 **Escopo real do gate.** O passo do workflow roda `--check` e constrói `site/`
-antes do upload. Ele cobre os critérios 1–4, 6, 7 e 8, a metade de build do
+antes do upload. Ele cobre os critérios 1–4 e 6–9, a metade de build do
 critério 5 (idempotência) e os casos de limite. A outra metade do critério 5 —
 `06` sem etapa pulada — continua verificação local, porque `data/interim/` está
 fora do git (`.gitignore`) e o CI não tem como rodar as etapas. O `--check`
@@ -458,7 +589,8 @@ falha antes do upload quando um critério executável regride.
 `--check` roda os critérios executáveis e os casos de limite e para no primeiro
 que falhar. Cada um tem o comando manual equivalente, para quando o `--check`
 discordar de uma pessoa. O `--check` varre todas as 1.291 páginas nos critérios
-1, 3, 4 e 8, todo o HTML e o índice no critério 2, o índice no critério 7, todo o
+1, 3, 4 e 8, `escolas.html` e as 1.291 páginas de escola no critério 2,
+`escolas.html` no critério 7, a home e `dados/home.json` no critério 9, todo o
 `site/dados` no critério 6 e faz um segundo build no critério 5; não há amostra
 de 10 páginas. Os sete perfis do §4 entram na conferência manual e os casos de
 limite no `check_edge_cases`.
@@ -479,10 +611,15 @@ python scripts/12_build_site.py --public data/public --out site \
 
 **2. Sem ranking.** Nenhuma página ordena escolas por indicador, nenhuma exibe
 faixa p10–p90 ou mediana da rede, `indice.json` está em ordem alfabética e o
-`index.html` não publica número nenhum (§2.1).
+`escolas.html` não publica número nenhum (§2.1). O escopo do termo é
+`escolas.html` mais as 1.291 páginas de escola — os dois lugares onde D3 vale. A
+home compara redes por decisão do mantenedor (§2.3) e por isso nomeia p10 e p90
+na legenda e na tabela do gráfico; `metodologia.html` e `como-ler.html` explicam
+o mesmo. Os três ficam fora da varredura por construção, e o critério 9 cobre a
+legenda da home.
 
 ```bash
-grep -c "p10\|p90\|mediana da rede" site/*.html    # 0 em todas
+grep -c "p10\|p90\|mediana da rede" site/escolas.html site/[0-9]*.html  # 0 em todas
 python -c "import json; d=json.load(open('site/indice.json')); \
   assert [x['nome'] for x in d]==sorted(x['nome'] for x in d)"
 ```
@@ -531,7 +668,7 @@ python scripts/12_build_site.py --public data/public --out site \
   --data-build 2026-11-06 --check-licencas
 ```
 
-**7. Sumário por RA.** O `index.html` tem um `<select id="ir-ra">` com uma opção
+**7. Sumário por RA.** O `escolas.html` tem um `<select id="ir-ra">` com uma opção
 para cada `#ra-<slug>` das 35 seções, na mesma ordem e com o mesmo rótulo, e
 nenhuma âncora se repete. O rótulo é de exibição; `data-ra` e `indice.json`
 mantêm o valor bruto (§2.1).
@@ -553,6 +690,26 @@ seis mutações que precisam falhar.
 ```bash
 python scripts/12_build_site.py --public data/public --out site \
   --data-build 2026-11-06 --check-sumario-escola
+```
+
+**9. A home.** Todo `data-numero` de `index.html` tem registro em
+`dados/home.json` com `fonte`, `arquivo` (dentro de `data/public/`), `ano`,
+`calculo`, `estado`, `n` inteiro ou `null` e `limites` não vazios; todo registro
+aparece no HTML e nenhum id se repete no JSON. O texto renderizado bate com o
+parquet pelo mesmo formatador da página (pt-BR, um decimal half-up). As somas da
+ausência fecham (com valor + sem valor = universo; pública + privada = universo;
+linha sem valor + sem linha = sem valor), a contagem de escolas bate com o
+cadastro e a porcentagem da creche é estadual ÷ total. Há exatamente quatro
+cartões, a legenda do gráfico é a do contrato e cita L-65, L-67, L-36, L-37 e
+L-32, e todo registro `tdi-*` cita L-65 e L-67 e traz "turma pequena" no
+`calculo`. Não há seta de variação nem link para página de escola; há link para
+`metodologia.html`; uma linha de Ideb ausente (`df_estado = "ausente"`) não é
+renderizada como número; e "27º de 27" só vale porque a linha do EM/Estadual de
+2025 tem `posicao == n_ufs` (hoje 27 de 27, com o DF isolado no último lugar).
+
+```bash
+python scripts/12_build_site.py --public data/public --out site \
+  --data-build 2026-11-06 --check-home
 ```
 
 **Casos de limite.** O `--check` também roda a cópia do insumo com 2024 sem

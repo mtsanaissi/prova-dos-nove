@@ -90,9 +90,12 @@ main`). O build é o pacote irmão `scripts/sitegen/`, importável porque
 | `loader.py` | confere sha256 e monta o modelo em memória de `data/public/` |
 | `fmt.py` | formatação pt-BR (milhar com ponto, decimal com vírgula), rótulo e slug de etapa |
 | `assets.py` + `static/` | CSS e JS de busca em arquivos de verdade, lidos uma vez: o CSS sai como `site/estilo.css`, o JS do índice é embutido no HTML |
-| `layout.py` | o documento HTML comum (cabeçalho, rodapé, carimbo) |
+| `layout.py` | o documento HTML comum (cabeçalho com a navegação, rodapé, carimbo) |
 | `region.py` | rótulo de exibição e slug de RA (tabela escrita à mão, L-64) |
-| `index_page.py` | índice: busca, salto por RA e lista por RA |
+| `home_page.py` | a home: quatro cartões, motivação, resumo de método e o coletor de procedência (`HomeNumbers`), espelho do `SchoolPage._add` |
+| `home_chart.py` | o gráfico de distorção por rede em SVG inline, com a tabela equivalente em `<details>` |
+| `schools_page.py` | `escolas.html`: busca, salto por RA e lista por RA |
+| `methodology_page.py` | `metodologia.html`: fontes, tratamento, limites e como conferir |
 | `info_pages.py` | `como-ler.html` e `creditos.html` |
 | `school_page.py` | a página da escola: `SchoolPage.render` e os nove `_block_*`, na ordem do §2 do contrato |
 | `build.py` | limpeza da saída, escrita de tudo e o limite de tamanho |
@@ -123,8 +126,10 @@ oferta vem do vetor da SEEDF; `zero` é `0`.
   suprime a taxa; `n` `null` suprime a taxa e mostra a matrícula `-`.
   `n_referencia` existe exatamente quando o `n` é contagem de alunos de outro
   ano — hoje, Ideb de 2005–2023 → `"2025"`.
-- Nenhuma média, mediana, faixa p10–p90 ou contagem de rede na página (D3), e
-  nenhuma ordenação por indicador: a página não vira ranking por clique.
+- Nenhuma média, mediana, faixa p10–p90 ou contagem de rede na página da escola
+  nem em `escolas.html` (D3), e nenhuma ordenação por indicador: a página não
+  vira ranking por clique. A home é a única exceção declarada (contrato §2.3),
+  tem legenda própria e check próprio (critério 9).
 - Nenhum número publicado cita família ODbL da SEEDF; o export recusa antes de
   gravar e o build recusa na lista de licenças (L-62).
 - Determinismo: iteração em ordem fixa, JSON com `sort_keys=True`, nenhum
@@ -146,25 +151,27 @@ passa a ser citada na página. Id não se reutiliza.
   --data-build 2026-11-06 --check
 ```
 
-Saída de referência (2026-11-11): 1.291 páginas de escola, 2.587 arquivos,
-29,8 MB, e nove `[ok]`. A tabela está na ordem de execução (a de `CHECKS`); a
+Saída de referência (2026-11-11): 1.291 páginas de escola, 2.590 arquivos,
+29,9 MB, e dez `[ok]`. A tabela está na ordem de execução (a de `CHECKS`); a
 coluna `#` é o número do critério no §8 do contrato.
 
 | # | chave | flag | o que cobre |
 |---|---|---|---|
 | 1 | `procedencia` | `--check-procedencia` | todo número visível tem registro completo |
-| 2 | `ranking` | — | índice alfabético, sem número, sem p10/p90/mediana |
-| 7 | `sumario` | `--check-sumario` | 35 RAs no salto, na mesma ordem das seções |
+| 2 | `ranking` | — | `escolas.html` e páginas de escola sem p10/p90/mediana e sem número |
+| 7 | `sumario` | `--check-sumario` | 35 RAs no salto de `escolas.html`, na mesma ordem das seções |
 | 3 | `limiar` | `--check-limiar` | unidade com `n < limiar` não publica taxa |
 | 4 | `estados` | `--check-estados` | `-`, `—`, `0` e as frases fixas |
 | 8 | `sumario_escola` | `--check-sumario-escola` | sumário = seções, ordem e rótulo; creche só com oferta |
+| 9 | `home` | `--check-home` | procedência, somas, quatro cartões e legenda da home |
 | 5 | `reprodutibilidade` | — | segundo build com os mesmos bytes |
 | 6 | `licencas` | `--check-licencas` | fonte de cada família nos créditos, sem ODbL |
 | — | `casos_limite` | `--check-casos` | 2024 sem linha/célula vazia, 2025 e creche ausentes, 493 em 2024, limiar 0 |
 
 Cada check lê o site já construído pela mesma execução (`CheckContext` leva
 insumo, saída, modelo, carimbo e limiar). Nenhum tem amostra: os critérios 1, 3,
-4 e 8 varrem as 1.291 páginas, o 2 varre o índice, o 6 varre todo o `site/dados`.
+4 e 8 varrem as 1.291 páginas, o 2 varre `escolas.html` e as páginas de escola, o
+9 varre a home e o `dados/home.json`, o 6 varre todo o `site/dados`.
 
 **Um check que não falha quando o defeito é injetado não é um check.** Ao mexer
 num deles, injete a falha de propósito (ex.: `"limites": []` numa entrada,
@@ -202,19 +209,22 @@ Conferências rápidas:
 grep -R --include='*.html' -e 'href="/' -e 'src="/' site || echo ok
 
 # status e tipo de conteúdo
-for u in /prova-dos-nove/ /prova-dos-nove/como-ler.html \
+for u in /prova-dos-nove/ /prova-dos-nove/escolas.html \
+         /prova-dos-nove/metodologia.html /prova-dos-nove/como-ler.html \
          /prova-dos-nove/creditos.html /prova-dos-nove/indice.json \
-         /prova-dos-nove/estilo.css /prova-dos-nove/dados/53000854.json; do
+         /prova-dos-nove/estilo.css /prova-dos-nove/dados/home.json \
+         /prova-dos-nove/dados/53000854.json /prova-dos-nove/53000854.html; do
   printf '%s %s\n' "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "http://127.0.0.1:8000$u")" "$u"
 done
 ```
 
-O que só o navegador mostra: busca do índice sem acento e sem caixa
-(`ceilandia`, `ÁGUAS CLARAS`), o `<select>` de salto por RA, a lista completa
-sem JavaScript, as nove âncoras de `como-ler.html`, o `<details>` do sumário de
-cada escola e os sete perfis-piloto — mais as duas páginas sem indicador e os
-casos de borda (2024 sem linha, célula vazia, `n < 30`, 493 de 2024). Os
-códigos e o que cada um prova estão no §4 de `docs/FASE-1.md`.
+O que só o navegador mostra: a home a 360 px e em tela larga, o gráfico legível
+sem cor, o `<details>` da tabela do gráfico, a busca de `escolas.html` sem acento
+e sem caixa (`ceilandia`, `ÁGUAS CLARAS`), o `<select>` de salto por RA, a lista
+completa sem JavaScript, as nove âncoras de `como-ler.html`, o `<details>` do
+sumário de cada escola e os sete perfis-piloto — mais as duas páginas sem
+indicador e os casos de borda (2024 sem linha, célula vazia, `n < 30`, 493 de
+2024). Os códigos e o que cada um prova estão no §4 de `docs/FASE-1.md`.
 
 Um 404 em `/favicon.ico` é esperado: o site não gera ícone. Não há `404.html`
 nem rota de cliente — código de escola errado cai no 404 padrão do GitHub.

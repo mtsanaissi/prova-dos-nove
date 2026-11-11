@@ -14,13 +14,20 @@ from .contract import MAX_SITE_BYTES
 from .loader import load_data
 from .assets import CSS
 from .layout import document
-from .index_page import render_index_page
+from .schools_page import render_schools_page
+from .home_page import render_home_page
+from .methodology_page import render_methodology_page
 from .info_pages import render_how_to_read_page, render_credits_page
 from .school_page import SchoolPage
 
+HOME_TITLE = "Prova dos Nove — uma página por escola no Distrito Federal"
+
 
 def _clean_output(site: Path) -> None:
-    for name in ("index.html", "creditos.html", "como-ler.html", "estilo.css", "indice.json"):
+    for name in (
+        "index.html", "escolas.html", "metodologia.html", "creditos.html",
+        "como-ler.html", "estilo.css", "indice.json",
+    ):
         target = site / name
         if target.is_file():
             target.unlink()
@@ -34,6 +41,13 @@ def _clean_output(site: Path) -> None:
 
 def _total_size(site: Path) -> int:
     return sum(p.stat().st_size for p in site.rglob("*") if p.is_file())
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def build_site(public: Path, out: Path, data_build: str, threshold: int, quiet: bool = False) -> dict:
@@ -55,7 +69,18 @@ def build_site(public: Path, out: Path, data_build: str, threshold: int, quiet: 
         json.dumps(index_entries, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8"
     )
 
-    (out / "index.html").write_text(render_index_page(data, data_build, threshold), encoding="utf-8")
+    home_body, home_numbers = render_home_page(data, data_build, threshold)
+    (out / "index.html").write_text(
+        document(HOME_TITLE, home_body, data_build, threshold), encoding="utf-8"
+    )
+    _write_json(
+        out / "dados" / "home.json",
+        {"pagina": "home", "gerado_em": data_build, "numeros": home_numbers},
+    )
+    (out / "escolas.html").write_text(render_schools_page(data, data_build, threshold), encoding="utf-8")
+    (out / "metodologia.html").write_text(
+        render_methodology_page(data_build, threshold), encoding="utf-8"
+    )
     (out / "como-ler.html").write_text(render_how_to_read_page(data_build, threshold), encoding="utf-8")
     (out / "creditos.html").write_text(render_credits_page(data, data_build, threshold), encoding="utf-8")
 
@@ -66,15 +91,9 @@ def build_site(public: Path, out: Path, data_build: str, threshold: int, quiet: 
             document(f'{school["nome"]} — Prova dos Nove', body, data_build, threshold),
             encoding="utf-8",
         )
-        (out / "dados" / f'{school["co"]}.json').write_text(
-            json.dumps(
-                {"escola": school["co"], "gerado_em": data_build, "numeros": page.numbers},
-                ensure_ascii=False,
-                sort_keys=True,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
+        _write_json(
+            out / "dados" / f'{school["co"]}.json',
+            {"escola": school["co"], "gerado_em": data_build, "numeros": page.numbers},
         )
 
     total = _total_size(out)

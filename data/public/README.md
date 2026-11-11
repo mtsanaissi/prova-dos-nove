@@ -2,9 +2,14 @@
 
 Exceção declarada à regra "`data/` nunca entra no git" (`AGENTS.md`,
 Convenções). Aqui entra **apenas** o recorte mínimo que o build do site lê:
-agregado por escola e por etapa, sem arquivo bruto, sem microdado e sem linha
-que identifique uma pessoa. Tudo nesta pasta é gerado por script, versionado e
-descrito em `SCHEMA.md`.
+agregado por escola e por etapa, mais a lista fechada de tabelas de contexto,
+sem arquivo bruto, sem microdado e sem linha que identifique uma pessoa. Tudo
+nesta pasta é gerado por script, versionado e descrito em `SCHEMA.md`.
+
+A lista de arquivos é **fechada e nominal**: `ideb_uf.parquet` (Ideb da INEP por
+UF, nível de território) e `agregados.parquet` (contagens e distribuições por
+rede, derivadas dos arquivos por escola). Acrescentar uma tabela a esta pasta
+exige emendar o `AGENTS.md` primeiro.
 
 Gerado por:
 
@@ -17,9 +22,17 @@ Gerado por:
 | `escolas.parquet` | escola (1.291) | identificação, rede, RA, `censo_2024_presente`, 8 sinalizadores de oferta e matrícula por etapa em 2024 e 2025 |
 | `indicadores.parquet` | escola × etapa × indicador × ano | Ideb observado (2005–2025), TDI, TNR, aprovação, reprovação e abandono (2025), com `estado` copiado da fonte |
 | `infraestrutura.parquet` | escola × item (8 itens) | presença declarada dos itens de infraestrutura, no universo das 927 escolas que oferecem ensino fundamental ou médio |
-| `procedencia.json` | família de indicador | fonte, arquivo, anos, cálculo, limites, `licenca`, `licenca_url` e o sha256 dos três parquets; topo com `execucao.etapas_puladas` |
+| `ideb_uf.parquet` | etapa × ano × rede (24 linhas) | Ideb observado do DF e do Brasil em 2023 e 2025, a posição do DF entre as UFs e o número de UFs com valor no ano; `df_estado`/`brasil_estado` dizem onde o número falta |
+| `agregados.parquet` | id do número da home (40 linhas) | contagens e distribuições por rede que a home publica: escolas e RAs, creche, cobertura do Ideb e percentis de distorção idade-série, com `valor`, `n` e `estado` |
+| `procedencia.json` | família de indicador (14 famílias) | fonte, arquivo, anos, cálculo, limites, `licenca`, `licenca_url` e o sha256 dos cinco parquets; topo com `execucao.etapas_puladas` |
 
-Tamanhos medidos em 2026-11-09: 61 KB, 40 KB, 13 KB e 4.7 KB.
+Tamanhos medidos em 2026-11-11: 61.846 B, 40.420 B, 12.289 B, 5.653 B, 6.030 B
+e 7.964 B, na ordem da tabela.
+
+`agregados.parquet` não aplica o limiar de n da página da escola: a distribuição
+de distorção inclui as unidades de turma pequena, e a diferença é declarada em
+L-67 e no `calculo` de cada registro `tdi-*`. A "privada" da distribuição reúne
+conveniada e não conveniada (L-36, L-37), e a rede federal fica fora (L-32).
 
 `censo_2024_presente` é `True` quando a escola de 2025 tem linha no Censo 2024
 e `False` quando não tem. As 53 escolas sem linha e as 3 com linha e células

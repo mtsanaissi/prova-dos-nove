@@ -275,7 +275,7 @@ class SchoolPage:
         parts = []
         parts.append(
             '<main>'
-            f'<p class="trilha"><a href="index.html">Todas as escolas</a></p>'
+            f'<p class="trilha"><a href="escolas.html">Todas as escolas</a></p>'
             f'<h1>{html.escape(e["nome"])}</h1>'
             f'<p class="subtitulo">{html.escape(region_label(e["ra"]))} · rede {html.escape(e["rede"])}</p>'
         )

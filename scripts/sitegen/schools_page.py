@@ -1,7 +1,7 @@
-"""Índice de escolas com busca por nome e salto por Região Administrativa.
+"""Lista de escolas com busca por nome e salto por Região Administrativa.
 
 Entrada: modelo de `loader.load_data`, carimbo do build e limiar.
-Saída: HTML do índice (salto, lista por RA e script de busca).
+Saída: HTML de `escolas.html` (salto, lista por RA e script de busca).
 Idempotente: sim — render puro."""
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from .layout import document
 from .region import region_anchor_id, region_label, region_sort_key
 
 
-def render_index_page(data: dict, data_build: str, threshold: int) -> str:
+def render_schools_page(data: dict, data_build: str, threshold: int) -> str:
     schools = data["escolas"]
     by_region: dict[str, list[dict]] = {}
     for school in schools:

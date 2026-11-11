@@ -12,8 +12,8 @@ Saída:   `data/interim/q1_unidades.csv` ... `q8_conferencia_seedf.csv`,
          `q16_presenca_escola_etapa.csv` e `q16_faixas_n.csv` (matriz de presença
          escola × etapa) e `q0_execucao.csv` (executado|pulado por etapa). Com
          `--public DIR`, grava também o insumo versionado do site
-         (`escolas.parquet`, `indicadores.parquet`, `infraestrutura.parquet` e
-         `procedencia.json`).
+         (`escolas.parquet`, `indicadores.parquet`, `infraestrutura.parquet`,
+         `ideb_uf.parquet`, `agregados.parquet` e `procedencia.json`).
 Idempotente: sim — leitura e reescrita das saídas; o insumo público só é
 sobrescrito com `--force` quando o sha256 do destino difere. Com `--public`,
 uma etapa pulada impede a gravação (código 1) a menos de `--parcial`; nesse
@@ -633,34 +633,31 @@ def _distribuicao(serie: pd.Series) -> dict:
     }
 
 
-def q8() -> None:
-    """Ideb do DF contra o Brasil e evidência por escola, por rede (2023 e 2025).
+def _ideb_uf_tabela() -> pd.DataFrame:
+    """Monta a tabela DF × Brasil × UFs, por etapa, ano e rede (2023 e 2025).
 
-    Entradas: `data/interim/inep/{ideb_uf_tidy, brasil_ideb_tidy,
-    ideb_escolas_df}.parquet` (gravados por `08_profile_inep.py`) e o cadastro
-    de 2025 em `data/interim/seedf/`.
-    Saídas: `q8_df_brasil_uf.csv`, `q8_escolas_rede.csv`,
-    `q8_cobertura_escolas_2025.csv`, `q8_conferencia_seedf.csv`.
-    Idempotente: sim — leitura e reescrita das saídas.
+    Entrada: `data/interim/inep/{ideb_uf_tidy, brasil_ideb_tidy}.parquet`
+    (gravados por `08_profile_inep.py`).
+    Saída: o DataFrame de `q8_df_brasil_uf.csv` e do parquet publicado
+    `ideb_uf.parquet`; falha com `ExportError` se o insumo da INEP faltar, para
+    que uma tabela não desapareça em silêncio.
+    Idempotente: sim — só lê.
     """
     arquivos = {
         "uf": INTERIM / "inep" / "ideb_uf_tidy.parquet",
         "brasil": INTERIM / "inep" / "brasil_ideb_tidy.parquet",
-        "escolas": INTERIM / "inep" / "ideb_escolas_df.parquet",
     }
     faltando = [n for n, p in arquivos.items() if not p.exists()]
     if faltando:
-        print(f"\n== Q8 não executado: falta {faltando} em data/interim/inep (rode 08)")
-        return
-
+        raise ExportError(
+            f"falta {faltando} em data/interim/inep para a tabela de Ideb por UF "
+            "(rode 08_profile_inep.py)"
+        )
     uf = pd.read_parquet(arquivos["uf"])
     br = pd.read_parquet(arquivos["brasil"])
-    esc = pd.read_parquet(arquivos["escolas"])
     uf = uf[(uf["indicador"] == "ideb_observado") & uf["valor"].notna()]
     br = br[(br["indicador"] == "ideb_observado") & br["valor"].notna()]
-    esc = esc[esc["indicador"] == "ideb_observado"]
 
-    # 1. DF × Brasil × mediana das UFs, por etapa, rede e ano.
     locais_uf = set(uf["local"]) - LOCAIS_AGREGADOS
     linhas = []
     for etapa in ("AI", "AF", "EM"):
@@ -701,6 +698,34 @@ def q8() -> None:
     tab = pd.DataFrame(linhas)
     for c in ("posicao", "n_ufs"):
         tab[c] = tab[c].astype("Int64")
+    return tab
+
+
+def q8() -> None:
+    """Ideb do DF contra o Brasil e evidência por escola, por rede (2023 e 2025).
+
+    Entradas: `data/interim/inep/{ideb_uf_tidy, brasil_ideb_tidy,
+    ideb_escolas_df}.parquet` (gravados por `08_profile_inep.py`) e o cadastro
+    de 2025 em `data/interim/seedf/`.
+    Saídas: `q8_df_brasil_uf.csv`, `q8_escolas_rede.csv`,
+    `q8_cobertura_escolas_2025.csv`, `q8_conferencia_seedf.csv`.
+    Idempotente: sim — leitura e reescrita das saídas.
+    """
+    arquivos = {
+        "uf": INTERIM / "inep" / "ideb_uf_tidy.parquet",
+        "brasil": INTERIM / "inep" / "brasil_ideb_tidy.parquet",
+        "escolas": INTERIM / "inep" / "ideb_escolas_df.parquet",
+    }
+    faltando = [n for n, p in arquivos.items() if not p.exists()]
+    if faltando:
+        print(f"\n== Q8 não executado: falta {faltando} em data/interim/inep (rode 08)")
+        return
+
+    esc = pd.read_parquet(arquivos["escolas"])
+    esc = esc[esc["indicador"] == "ideb_observado"]
+
+    # 1. DF × Brasil × mediana das UFs, por etapa, rede e ano.
+    tab = _ideb_uf_tabela()
     tab.to_csv(INTERIM / "q8_df_brasil_uf.csv", index=False)
     print("\n== Q8 Ideb do DF contra o Brasil e as UFs (2023 e 2025)")
     print(tab.to_string(index=False))
@@ -1917,9 +1942,22 @@ DATASET_SEEDF_POR_FAMILIA = {
     "identificacao": "relacao-de-unidades-escolares-abrangendo-todas-as-redes-de-ensino-do-distrito-federal",
     "oferta": "relacao-de-unidades-escolares-abrangendo-todas-as-redes-de-ensino-do-distrito-federal",
     "infraestrutura": "dados-de-infraestrutura-abrangendo-todas-as-redes-de-ensino-df",
+    "home_contagem": "relacao-de-unidades-escolares-abrangendo-todas-as-redes-de-ensino-do-distrito-federal",
 }
 
-FAMILIAS_INEP = {"matricula", "ideb", "fluxo", "tdi", "tnr", "creche"}
+FAMILIAS_INEP = {
+    "matricula", "ideb", "fluxo", "tdi", "tnr", "creche",
+    "ideb_uf", "home_creche", "home_ideb_cobertura", "home_tdi_rede",
+}
+
+# Texto de cálculo das linhas `tdi-*` do agregado da home; entra no
+# `procedencia.json` e no JSON de procedência da página, palavra por palavra.
+CALCULO_TDI_REDE = (
+    "Percentil (interpolação linear) da distorção idade-série de 2025 entre as unidades "
+    "escola × etapa da rede, com taxa publicada (estados valor e zero). Inclui unidades de "
+    "turma pequena, cuja taxa a página da escola não publica (D4). Rede privada = conveniada "
+    "+ não conveniada. Rede federal fora."
+)
 
 REGISTROS_PUBLICOS = [
     {
@@ -2002,6 +2040,61 @@ REGISTROS_PUBLICOS = [
         "anos": ["2024", "2025"],
         "calculo": "matrícula em creche da escola, como está no campo do Censo",
         "limites": ["L-27", "L-28", "L-62", "L-63"],
+    },
+    {
+        "familia": "ideb_uf",
+        "bloco": 10,
+        "fonte": "INEP — Ideb divulgação por UF e Brasil 2023–2025",
+        "arquivo": "data/public/ideb_uf.parquet",
+        "anos": ["2023", "2025"],
+        "calculo": (
+            "valor observado do Ideb da UF e do Brasil, como publicado; posição = "
+            "1 + número de UFs com valor maior; denominador = UFs com valor no ano"
+        ),
+        "limites": ["L-10", "L-32", "L-66"],
+    },
+    {
+        "familia": "home_contagem",
+        "bloco": 11,
+        "fonte": "SEEDF — Cadastro de Unidades Escolares 2025",
+        "arquivo": "data/public/agregados.parquet",
+        "anos": ["2025"],
+        "calculo": "contagem de escolas e de Regiões Administrativas distintas no cadastro",
+        "limites": ["L-36", "L-37", "L-64"],
+    },
+    {
+        "familia": "home_creche",
+        "bloco": 12,
+        "fonte": "INEP — Censo Escolar 2024–2025",
+        "arquivo": "data/public/agregados.parquet",
+        "anos": ["2025"],
+        "calculo": (
+            "contagem das unidades que ofertam creche e soma da matrícula em creche de "
+            "2025 por rede; a rede vem do cadastro da SEEDF"
+        ),
+        "limites": ["L-27", "L-28", "L-36", "L-62", "L-63"],
+    },
+    {
+        "familia": "home_ideb_cobertura",
+        "bloco": 13,
+        "fonte": "INEP — Ideb por Escola 2025 + Censo Escolar 2025",
+        "arquivo": "data/public/agregados.parquet",
+        "anos": ["2025"],
+        "calculo": (
+            "escolas com oferta de anos iniciais, finais ou médio, decompostas por ter "
+            "Ideb em 2025, ter linha de 2025 sem valor e não ter linha; pública = "
+            "estadual + federal"
+        ),
+        "limites": ["L-08", "L-09", "L-30", "L-31"],
+    },
+    {
+        "familia": "home_tdi_rede",
+        "bloco": 14,
+        "fonte": "INEP — Distorção Idade-Série por Escola 2025",
+        "arquivo": "data/public/agregados.parquet",
+        "anos": ["2025"],
+        "calculo": CALCULO_TDI_REDE,
+        "limites": ["L-11", "L-32", "L-36", "L-37", "L-59", "L-65", "L-67"],
     },
 ]
 
@@ -2276,14 +2369,185 @@ def _infraestrutura_publica(escolas: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(linhas, columns=["co_entidade", "item", "ano", "valor", "estado"])
 
 
-def _grava_parquets(destino: Path, escolas: pd.DataFrame, indicadores: pd.DataFrame, infra: pd.DataFrame) -> dict[str, str]:
-    """Grava os três parquets e devolve o sha256 de cada um."""
+def _ideb_uf_publica() -> pd.DataFrame:
+    """Recorte publicado da tabela de Ideb por UF (grão etapa × ano × rede).
+
+    Entrada: `_ideb_uf_tabela()`.
+    Saída: 24 linhas com `df`, `brasil`, o `estado` de cada um e a posição; sem
+    `df_menos_brasil` nem `mediana_ufs`, que são derivados e o site não usa.
+    Idempotente: sim — derivação pura.
+    """
+    tabela = _ideb_uf_tabela().copy()
+    tabela["df_estado"] = tabela["df"].map(lambda v: "valor" if pd.notna(v) else "ausente")
+    tabela["brasil_estado"] = tabela["brasil"].map(
+        lambda v: "valor" if pd.notna(v) else "ausente"
+    )
+    return tabela[
+        [
+            "etapa", "ano", "rede", "df", "df_estado",
+            "brasil", "brasil_estado", "posicao", "n_ufs",
+        ]
+    ].reset_index(drop=True)
+
+
+def _agregados_publicos(escolas: pd.DataFrame, indicadores: pd.DataFrame) -> pd.DataFrame:
+    """Monta os números da home em formato longo (grão: id do número).
+
+    Entrada: os DataFrames exportados `escolas` e `indicadores` — nunca
+    `data/interim/`, para que o agregado nasça do mesmo recorte que o site lê.
+    Saída: `id`, `bloco`, `grupo`, `etapa`, `ano`, `metrica`, `valor`, `n`,
+    `estado`; `valor` quantizado a 4 decimais e `n` inteiro ou nulo.
+    Idempotente: sim — derivação pura, em ordem fixa.
+    """
+    linhas: list[dict] = []
+
+    def linha(id, bloco, grupo, etapa, metrica, valor, n=None) -> None:
+        linhas.append(
+            {
+                "id": id,
+                "bloco": bloco,
+                "grupo": grupo,
+                "etapa": etapa,
+                "ano": "2025",
+                "metrica": metrica,
+                "valor": None if valor is None else round(float(valor), 4),
+                "n": n,
+                "estado": "valor",
+            }
+        )
+
+    # Contagem do cadastro: 1.291 escolas em 35 RAs (não é o universo do Ideb).
+    linha("escolas-total", "contagem", "todas", "", "escolas", len(escolas))
+    linha("ras-total", "contagem", "todas", "", "ras", int(escolas["ra"].nunique()), len(escolas))
+
+    # Creche: unidades que ofertam creche e a matrícula delas em 2025.
+    creche = escolas[escolas["oferta_inf_cre"] == 1]
+    if creche["mat_inf_cre_2025"].isna().any():
+        raise ExportError(
+            "agregado da home: unidade que oferta creche sem matrícula de 2025; "
+            "nulo não entra como zero"
+        )
+    mat_creche = creche["mat_inf_cre_2025"]
+    unidades = int(len(creche))
+    unidades_estadual = int((creche["rede"] == "estadual").sum())
+    mat_total = int(mat_creche.sum())
+    mat_estadual = int(mat_creche[creche["rede"] == "estadual"].sum())
+    linha("creche-unidades-total", "creche", "todas", "", "unidades", unidades)
+    linha("creche-unidades-estadual", "creche", "estadual", "", "unidades",
+          unidades_estadual, unidades)
+    linha("creche-mat-total", "creche", "todas", "", "matriculas", mat_total, unidades)
+    linha("creche-mat-estadual", "creche", "estadual", "", "matriculas",
+          mat_estadual, unidades_estadual)
+    linha("creche-mat-estadual-pct", "creche", "estadual", "", "percentual",
+          100 * mat_estadual / mat_total if mat_total else None, mat_total)
+
+    # Cobertura do Ideb no universo de escolas com AI, AF ou EM em 2025.
+    universo = escolas[
+        (escolas["oferta_fund_ai"] == 1)
+        | (escolas["oferta_fund_af"] == 1)
+        | (escolas["oferta_med"] == 1)
+    ]
+    ideb = indicadores[
+        (indicadores["indicador"] == "ideb_observado") & (indicadores["ano"] == "2025")
+    ]
+    com_valor = set(
+        zip(
+            ideb.loc[ideb["estado"] == "valor", "co_entidade"],
+            ideb.loc[ideb["estado"] == "valor", "etapa"],
+        )
+    )
+    com_linha = set(zip(ideb["co_entidade"], ideb["etapa"]))
+    ofertas = (("AI", "oferta_fund_ai"), ("AF", "oferta_fund_af"), ("EM", "oferta_med"))
+    contagem = {
+        "publica": {"com_valor": 0, "linha_sem_valor": 0, "sem_linha": 0},
+        "privada": {"com_valor": 0, "linha_sem_valor": 0, "sem_linha": 0},
+    }
+    for r in universo.itertuples():
+        etapas = [etapa for etapa, coluna in ofertas if getattr(r, coluna) == 1]
+        grupo = "publica" if r.rede in ("estadual", "federal") else "privada"
+        if any((r.co_entidade, etapa) in com_valor for etapa in etapas):
+            contagem[grupo]["com_valor"] += 1
+        elif any((r.co_entidade, etapa) in com_linha for etapa in etapas):
+            contagem[grupo]["linha_sem_valor"] += 1
+        else:
+            contagem[grupo]["sem_linha"] += 1
+    total_universo = int(len(universo))
+    total_com_valor = sum(c["com_valor"] for c in contagem.values())
+    total_sem_valor = total_universo - total_com_valor
+    linha("ideb-universo", "ausencia", "todas", "", "escolas", total_universo)
+    linha("ideb-com-valor", "ausencia", "todas", "", "escolas", total_com_valor)
+    linha("ideb-sem-valor", "ausencia", "todas", "", "escolas", total_sem_valor)
+    for grupo in ("publica", "privada"):
+        c = contagem[grupo]
+        linha(f"ideb-{grupo}-com-valor", "ausencia", grupo, "", "escolas", c["com_valor"])
+        linha(
+            f"ideb-{grupo}-linha-sem-valor", "ausencia", grupo, "", "escolas",
+            c["linha_sem_valor"],
+        )
+        linha(f"ideb-{grupo}-sem-linha", "ausencia", grupo, "", "escolas", c["sem_linha"])
+
+    # Distribuição da distorção idade-série por rede: todos os valores publicados
+    # (estados valor e zero), sem limiar de n — a página da escola suprime a taxa
+    # de turma pequena (D4), aqui ela entra e a diferença é declarada (L-67).
+    tdi = indicadores[
+        (indicadores["indicador"] == "tdi")
+        & (indicadores["ano"] == "2025")
+        & (indicadores["estado"].isin(["valor", "zero"]))
+    ]
+    tdi = tdi.merge(escolas[["co_entidade", "rede"]], on="co_entidade", how="left")
+    grupos = {
+        "estadual": {"estadual"},
+        "privada": {"privada conveniada", "privada não conveniada"},
+    }
+    for etapa, rotulo in (("AI", "anos iniciais"), ("AF", "anos finais"), ("EM", "ensino médio")):
+        for grupo, redes in grupos.items():
+            serie = tdi.loc[(tdi["etapa"] == etapa) & tdi["rede"].isin(redes), "valor"]
+            if serie.empty:
+                raise ExportError(
+                    f"agregado da home: sem unidade de distorção em {etapa}/{grupo}"
+                )
+            prefixo = f"tdi-{etapa.lower()}-{grupo}"
+            linha(f"{prefixo}-p10", "tdi", grupo, rotulo, "p10",
+                  float(serie.quantile(0.10)), int(serie.size))
+            linha(f"{prefixo}-mediana", "tdi", grupo, rotulo, "mediana",
+                  float(serie.median()), int(serie.size))
+            linha(f"{prefixo}-p90", "tdi", grupo, rotulo, "p90",
+                  float(serie.quantile(0.90)), int(serie.size))
+            linha(f"{prefixo}-n", "tdi", grupo, rotulo, "unidades", int(serie.size))
+
+    agregados = pd.DataFrame(
+        linhas,
+        columns=["id", "bloco", "grupo", "etapa", "ano", "metrica", "valor", "n", "estado"],
+    )
+    agregados["n"] = pd.array(agregados["n"], dtype="Int64")
+    if agregados["id"].duplicated().any():
+        raise ExportError("agregado da home com id duplicado")
+    return agregados
+
+
+def _grava_parquets(
+    destino: Path,
+    escolas: pd.DataFrame,
+    indicadores: pd.DataFrame,
+    infra: pd.DataFrame,
+    ideb_uf: pd.DataFrame,
+    agregados: pd.DataFrame,
+) -> dict[str, str]:
+    """Grava os cinco parquets e devolve o sha256 de cada um."""
     escolas.to_parquet(destino / "escolas.parquet", index=False)
     indicadores.to_parquet(destino / "indicadores.parquet", index=False)
     infra.to_parquet(destino / "infraestrutura.parquet", index=False)
+    ideb_uf.to_parquet(destino / "ideb_uf.parquet", index=False)
+    agregados.to_parquet(destino / "agregados.parquet", index=False)
     return {
         nome: sha256(destino / nome)
-        for nome in ("escolas.parquet", "indicadores.parquet", "infraestrutura.parquet")
+        for nome in (
+            "escolas.parquet",
+            "indicadores.parquet",
+            "infraestrutura.parquet",
+            "ideb_uf.parquet",
+            "agregados.parquet",
+        )
     }
 
 
@@ -2296,7 +2560,8 @@ def export_public(
 
     Entrada: parquets de `data/interim/seedf/` e `data/interim/inep/`.
     Saída:   `dest/escolas.parquet`, `dest/indicadores.parquet`,
-             `dest/infraestrutura.parquet` e `dest/procedencia.json`.
+             `dest/infraestrutura.parquet`, `dest/ideb_uf.parquet`,
+             `dest/agregados.parquet` e `dest/procedencia.json`.
     Idempotente: sim — o mesmo insumo produz os mesmos bytes. Se `dest` já tem
     um arquivo com sha256 diferente do que seria gravado, a exportação falha e
     só sobrescreve com `force=True`, para que mudança no insumo apareça no diff.
@@ -2312,10 +2577,12 @@ def export_public(
     escolas = _escolas_publicas()
     indicadores = _indicadores_publicos(escolas)
     infra = _infraestrutura_publica(escolas)
+    ideb_uf = _ideb_uf_publica()
+    agregados = _agregados_publicos(escolas, indicadores)
 
     with tempfile.TemporaryDirectory(prefix=".public-", dir=dest.parent) as tmp:
         tmp = Path(tmp)
-        hashes = _grava_parquets(tmp, escolas, indicadores, infra)
+        hashes = _grava_parquets(tmp, escolas, indicadores, infra, ideb_uf, agregados)
         procedencia = {
             "sha256": hashes,
             "registros": _registros_publicos(),
@@ -2332,6 +2599,8 @@ def export_public(
                 "escolas.parquet",
                 "indicadores.parquet",
                 "infraestrutura.parquet",
+                "ideb_uf.parquet",
+                "agregados.parquet",
                 "procedencia.json",
             )
         }
@@ -2355,6 +2624,8 @@ def export_public(
             "escolas": len(escolas),
             "indicadores": len(indicadores),
             "infraestrutura": len(infra),
+            "ideb_uf": len(ideb_uf),
+            "agregados": len(agregados),
         }
 
 
@@ -2443,7 +2714,9 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "\n== insumo público: "
             f"{resumo['escolas']:,} escolas, {resumo['indicadores']:,} linhas de indicador, "
-            f"{resumo['infraestrutura']:,} linhas de infraestrutura em {args.public}"
+            f"{resumo['infraestrutura']:,} linhas de infraestrutura, "
+            f"{resumo['ideb_uf']:,} linhas de Ideb por UF e "
+            f"{resumo['agregados']:,} agregados da home em {args.public}"
         )
     return 0
 

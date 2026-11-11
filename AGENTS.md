@@ -44,9 +44,13 @@ veredito, não limite.
 - `data/raw/` is immutable. Normalized output goes to `data/interim/` as
   parquet.
 - `data/` never enters git; `data/raw/MANIFEST.md` does. The one exception is
-  `data/public/`: the minimal per-school aggregate the site build reads (no raw
-  file, no microdata, no row that identifies a person), small enough to carry
-  the build in CI. Anything there is generated, versioned and declared here.
+  `data/public/`: the minimal aggregate the build reads — per-school parquets
+  plus a closed list of context tables, `ideb_uf.parquet` (INEP Ideb by UF,
+  territory level) and `agregados.parquet` (counts and distributions by network,
+  derived from the per-school files). No raw file, no microdata, no row that
+  identifies a person, small enough to carry the build in CI. Adding a table to
+  this list requires amending this file. Anything there is generated, versioned
+  and declared here.
 - Every script runs from scratch with no undocumented manual step, and opens
   with a docstring naming input, output and whether it is idempotent.
 
