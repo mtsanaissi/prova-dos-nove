@@ -12,6 +12,9 @@ venv/
 __pycache__/
 *.py[cod]
 
+# artefatos de ferramentas: snapshots e logs do Playwright MCP
+.playwright-mcp/
+
 # notebooks
 .ipynb_checkpoints/
 
